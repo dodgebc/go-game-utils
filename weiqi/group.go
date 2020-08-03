@@ -1,5 +1,12 @@
 package weiqi
 
+// initial capacities before expansion
+// (these don't matter too much)
+const (
+	edgeCap     = 2
+	interiorCap = 2
+)
+
 // group tracks a group of connected stones
 type group struct {
 	edge     []vertex
@@ -9,8 +16,10 @@ type group struct {
 
 // newGroup finds all the connected stones from a vertex
 func newGroup(v vertex, b board) group {
-	p := group{edge: []vertex{v}}
-	p.interior = make([]vertex, 0, 8)
+	var p group
+	p.edge = make([]vertex, 1, edgeCap)
+	p.edge[0] = v
+	p.interior = make([]vertex, 0, interiorCap)
 	for p.expand(b) > 0 {
 		continue
 	}
@@ -19,8 +28,10 @@ func newGroup(v vertex, b board) group {
 
 // newGroupIfDead stops expanding if group is confirmed alive (for speed)
 func newGroupIfDead(v vertex, b board) group {
-	p := group{edge: []vertex{v}}
-	p.interior = make([]vertex, 0, 8)
+	var p group
+	p.edge = make([]vertex, 1, edgeCap)
+	p.edge[0] = v
+	p.interior = make([]vertex, 0, interiorCap)
 	for p.expand(b) > 0 {
 		if p.alive {
 			p.edge = p.edge[:0]
@@ -33,44 +44,43 @@ func newGroupIfDead(v vertex, b board) group {
 
 func (p *group) expand(b board) int {
 
-	nextEdge := make([]vertex, 0, len(p.edge)*4)
+	oldEdgeLen := len(p.edge)
+	p.interior = append(p.interior, p.edge...) // Move edge to interior
+	p.edge = p.edge[:0]                        // Reset edge
 
-	for _, v := range p.edge { // Loop over edge of group
+	// Loop over old edge of group
+	for _, v := range p.interior[len(p.interior)-oldEdgeLen:] {
 		vColor := b.look(v)
 
-		// big cost calling adjacent, maybe we should just do it in this function
-		// could manually write out each coordinate and check if it's on the board
-		// we would have to repeat a lot of code, not sure if there is a concise way to loop over 4
-		for _, adj := range v.adjacent(b.height, b.width) { // Loop over adjacent vertices
-			adjColor := b.look(adj)
-
-			switch adjColor {
-			case vColor: // Same color, maybe we should expand group to include
-				shouldAdd := true
-				for _, already := range nextEdge { // Check if already in group
-					if adj.Equals(already) {
-						shouldAdd = false
+		// Loop over adjacent vertices
+		for i := 0; i < 2; i++ {
+			for j := -1; j < 2; j += 2 {
+				adj := vertex{v[0] + i*j, v[1] + (1-i)*j}
+				if (adj[0] >= 0) && (adj[0] < b.height) && (adj[1] >= 0) && (adj[1] < b.width) {
+					adjColor := b.look(adj) //b.flatArray[adj[0]*b.width+adj[1]]
+					switch adjColor {
+					case vColor: // Same color, maybe we should expand group to include
+						shouldAdd := true
+						for _, already := range p.interior { // Check if already in group
+							if adj == already {
+								shouldAdd = false
+							}
+						}
+						for _, already := range p.edge { // Check if already added to new edge
+							if adj == already {
+								shouldAdd = false
+							}
+						}
+						if shouldAdd {
+							p.edge = append(p.edge, adj)
+						}
+					case 0: // Liberty, group is alive
+						p.alive = true
 					}
 				}
-				for _, already := range p.edge { // Clumsy loop repeats, but this is fastest
-					if adj.Equals(already) {
-						shouldAdd = false
-					}
-				}
-				for _, already := range p.interior {
-					if adj.Equals(already) {
-						shouldAdd = false
-					}
-				}
-				if shouldAdd {
-					nextEdge = append(nextEdge, adj)
-				}
-			case 0: // Liberty, group is alive
-				p.alive = true
 			}
 		}
 	}
-	p.interior = append(p.interior, p.edge...) // Move edge to interior
-	p.edge = nextEdge                          // Move new edge to edge
-	return len(nextEdge)
+
+	return len(p.edge)
 }

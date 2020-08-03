@@ -2,6 +2,8 @@ package weiqi
 
 import "fmt"
 
+type vertex [2]int
+
 // Move stores the color and intersection of a move
 type Move struct {
 	Color  int8
@@ -19,7 +21,8 @@ func NewMovePass(color int8) Move {
 	return Move{Color: color, pass: true}
 }
 
-// NewMoveFromString parses an SGF-style string like "Bcd" (pass is "W", not "Wtt")
+// NewMoveFromString parses an SGF-style string like "Bcd" (pass is "W", not "Wtt").
+// The maximum coordinate in this format is Z (52), use NewMove for larger sizes.
 func NewMoveFromString(moveString string) (Move, error) {
 
 	// Check length of string
@@ -55,68 +58,23 @@ func NewMoveFromString(moveString string) (Move, error) {
 	return Move{Color: color, vertex: vertex{row, col}}, nil
 }
 
-// Equals compares two moves
-func (m Move) Equals(m2 Move) bool {
-	if m.Color != m2.Color {
-		return false
-	}
-	if m.vertex != m2.vertex {
-		return false
-	}
-	return true
-}
-
 func (m Move) String() string {
-	s := "?"
+	playerLetter := "?"
 	switch m.Color {
 	case 1:
-		s = "B"
+		playerLetter = "B"
 	case -1:
-		s = "W"
+		playerLetter = "W"
 	}
-	return s + m.vertex.String()
-}
-
-// vertex stores coordinates of an intersection
-// potentially replace with [2]int for performance
-type vertex struct {
-	row, col int
-}
-
-// adjacent returns adjacent vertices (PERFORMANCE MATTERS HERE)
-// possibly remove this function, too much allocation overhead
-// behavior may be unintuitive if vertex is outside the board
-func (v vertex) adjacent(height, width int) []vertex {
-	adj := make([]vertex, 0, 4) // main cost is this allocation, shouldn't really need to do it this way
-	if v.row-1 >= 0 {
-		adj = append(adj, vertex{v.row - 1, v.col})
-	}
-	if v.row+1 < height {
-		adj = append(adj, vertex{v.row + 1, v.col})
-	}
-	if v.col-1 >= 0 {
-		adj = append(adj, vertex{v.row, v.col - 1})
-	}
-	if v.col+1 < width {
-		adj = append(adj, vertex{v.row, v.col + 1})
-	}
-	return adj
-}
-
-func (v vertex) Equals(v2 vertex) bool {
-	return (v.row == v2.row) && (v.col == v2.col)
-}
-
-func (v vertex) String() string {
-	rowLetter, err1 := coordinateToLetter(v.row)
-	colLetter, err2 := coordinateToLetter(v.col)
+	rowLetter, err1 := coordinateToLetter(m.vertex[0])
+	colLetter, err2 := coordinateToLetter(m.vertex[1])
 	if err1 != nil {
 		rowLetter = "?"
 	}
 	if err2 != nil {
 		colLetter = "?"
 	}
-	return colLetter + rowLetter
+	return playerLetter + colLetter + rowLetter
 }
 
 func letterToCoordinate(letter byte) (int, error) {
@@ -132,7 +90,7 @@ func letterToCoordinate(letter byte) (int, error) {
 
 func coordinateToLetter(coordinate int) (string, error) {
 	if (coordinate < 0) || (coordinate >= 52) {
-		return "", fmt.Errorf("invalid coordinate: %d", coordinate)
+		return "", fmt.Errorf("cannot convert coordinate to string: %d", coordinate)
 	}
 	if coordinate < 26 { // lowercase
 		return string(byte(coordinate + 97)), nil

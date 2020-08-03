@@ -11,6 +11,8 @@ Rulesets available:
 Game scoring is not supported yet.*/
 package weiqi
 
+const gameCap = 64
+
 // Game stores Go game information and its methods allow for game control
 type Game struct {
 	turn       int8
@@ -27,9 +29,9 @@ func NewGame(height, width int) Game {
 	r, _ := newRules("")
 
 	g := Game{turn: 1, board: b, rules: r}
-	g.prevTurns = append(g.prevTurns, -1)
-	g.prevBoards = append(g.prevBoards, g.board)
-	g.prevHashes = append(g.prevHashes, 0)
+	g.prevTurns = make([]int8, 0, gameCap)
+	g.prevBoards = make([]board, 0, gameCap)
+	g.prevHashes = make([]int, 0, gameCap)
 	return g
 }
 
@@ -41,6 +43,15 @@ func (g *Game) SetRules(ruleset string) error {
 	}
 	g.rules = r
 	return nil
+}
+
+// Reset returns the game to its starting state
+func (g *Game) Reset() {
+	g.turn = 1
+	g.board.clear()
+	g.prevTurns = g.prevTurns[:0]
+	g.prevBoards = g.prevBoards[:0]
+	g.prevHashes = g.prevHashes[:0]
 }
 
 func (g *Game) playOrCheck(m Move, playMode string) error {
@@ -78,13 +89,18 @@ func (g *Game) playOrCheck(m Move, playMode string) error {
 
 	// Clear opponent stones
 	oppStonesRemoved := false
-	for _, adj := range m.vertex.adjacent(nextBoard.height, nextBoard.width) {
-		adjColor := nextBoard.look(adj)
-		if adjColor == -m.Color {
-			group := newGroupIfDead(adj, nextBoard)
-			if !group.alive {
-				nextBoard.remove(group)
-				oppStonesRemoved = true
+	for i := 0; i < 2; i++ { // Loop over adjacent vertices
+		for j := -1; j < 2; j += 2 {
+			adj := vertex{m.vertex[0] + i*j, m.vertex[1] + (1-i)*j}
+			if (adj[0] >= 0) && (adj[0] < nextBoard.height) && (adj[1] >= 0) && (adj[1] < nextBoard.width) {
+				adjColor := nextBoard.look(adj)
+				if adjColor == -m.Color {
+					group := newGroupIfDead(adj, nextBoard)
+					if !group.alive {
+						nextBoard.remove(group)
+						oppStonesRemoved = true
+					}
+				}
 			}
 		}
 	}
@@ -103,8 +119,8 @@ func (g *Game) playOrCheck(m Move, playMode string) error {
 	// Check ko violation
 	if g.rules.positionalSuperko || g.rules.situationalSuperko { // But only if ruleset deems it necessary
 		for i := range g.prevTurns {
-			if nextBoard.hash == g.prevHashes[i] { // First speedily compare hashes
-				if nextBoard.Equals(g.prevBoards[i]) { // Then double check the real board
+			if nextBoard.hash == g.prevHashes[i] { // Putting hash comparison here instead of Equals() is required for speed
+				if nextBoard.Equals(g.prevBoards[i]) {
 					if g.rules.positionalSuperko {
 						return GameError{ErrPositionalSuperko, m}
 					}
@@ -137,6 +153,21 @@ func (g *Game) Play(m Move) error {
 // Check checks move legality but does not alter the game state
 func (g *Game) Check(m Move) error {
 	return g.playOrCheck(m, "check")
+}
+
+// Setup allows arbitrary moves to be played for setup purposes.
+// The game state is relatively unaffected, but hashes are updated.
+// The only possible error is ErrOutsideBoard for invalid vertices.
+func (g *Game) Setup(m Move) error {
+	// Can never play a move outside of board
+	if !g.board.exists(m.vertex) {
+		return GameError{ErrOutsideBoard, m}
+	}
+	// Copy board and place move (must always copy so as not to affect prevBoards)
+	nextBoard := g.board.Copy()
+	nextBoard.place(m)
+	g.board = nextBoard
+	return nil
 }
 
 func (g Game) String() string {

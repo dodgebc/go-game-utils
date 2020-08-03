@@ -5,6 +5,20 @@ import (
 	"strings"
 )
 
+// maximum precomputed hash table size
+const preMaxSize = 19
+
+// This avoid expensive hash table re-initialization
+// for games of a certain size or less.
+var preHashTable []int
+
+func init() {
+	preHashTable = make([]int, preMaxSize*preMaxSize*2)
+	for i := range preHashTable {
+		preHashTable[i] = rand.Int()
+	}
+}
+
 // board holds the current Go board
 type board struct {
 	height, width int
@@ -16,17 +30,23 @@ type board struct {
 func newBoard(height, width int) board {
 	b := board{height: height, width: width}
 	b.flatArray = make([]int8, height*width)
-	rand.Seed(1)
-	b.hashTable = make([]int, height*width*3)
-	for i := range b.hashTable {
-		b.hashTable[i] = rand.Int()
+	if height*width <= preMaxSize*preMaxSize {
+		b.hashTable = preHashTable
+	} else {
+		// Board size too large, need to rebuild hash table
+		// If many games will be large, recommend increasing preMaxSize
+		rand.Seed(1)
+		b.hashTable = make([]int, height*width*2)
+		for i := range b.hashTable {
+			b.hashTable[i] = rand.Int()
+		}
 	}
 	return b
 }
 
 // exists checks if the vertex is on the board
 func (b *board) exists(v vertex) bool {
-	if (v.row >= 0) && (v.row < b.height) && (v.col >= 0) && (v.col < b.width) {
+	if (v[0] >= 0) && (v[0] < b.height) && (v[1] >= 0) && (v[1] < b.width) {
 		return true
 	}
 	return false
@@ -34,25 +54,33 @@ func (b *board) exists(v vertex) bool {
 
 // look retrieves the color at a vertex
 func (b *board) look(v vertex) int8 {
-	return b.flatArray[v.row*b.width+v.col]
+	return b.flatArray[v[0]*b.width+v[1]]
 }
 
 // place places a move and updates the board hash
 func (b *board) place(m Move) {
 	if !m.pass {
-		i := m.vertex.row*b.width + m.vertex.col
+		i := m.vertex[0]*b.width + m.vertex[1]
 		b.flatArray[i] = m.Color
-		b.hash = b.hash ^ b.hashTable[i*3+int(b.flatArray[i])+1]
+		b.hash = b.hash ^ b.hashTable[i*2+int(b.flatArray[i]+1)/2]
 	}
 }
 
 // remove removes a group and updates the board hash
 func (b *board) remove(p group) {
 	for _, v := range p.interior {
-		i := v.row*b.width + v.col
-		b.hash = b.hash ^ b.hashTable[i*3+int(b.flatArray[i])+1]
+		i := v[0]*b.width + v[1]
+		b.hash = b.hash ^ b.hashTable[i*2+int(b.flatArray[i]+1)/2]
 		b.flatArray[i] = 0
 	}
+}
+
+// clear removes all stones and resets hash
+func (b *board) clear() {
+	for i := range b.flatArray {
+		b.flatArray[i] = 0
+	}
+	b.hash = 0
 }
 
 func (b *board) Equals(b2 board) bool {

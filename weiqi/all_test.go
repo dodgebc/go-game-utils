@@ -2,7 +2,6 @@ package weiqi
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 )
@@ -28,18 +27,28 @@ func BenchmarkAlphaGo(b *testing.B) {
 		"Bah", "Wai", "Bkd", "Wie", "Bkc", "Wkb", "Bgk", "Wib", "Bqh", "Wrh",
 		"Bqs", "Wrs", "Boh", "Wsl", "Bof", "Wsj", "Bni", "Wnj", "Boo", "Wjp",
 	}
+	g := NewGame(19, 19)
+	_ = g.SetRules("NZ")
 	for i := 0; i < b.N; i++ {
-		err := playMoveSequence(19, 19, moveSequence, "NZ")
-		if err != nil {
-			b.Fatal(err)
+		g.Reset()
+		for _, m := range moveSequence {
+			move, err := NewMoveFromString(m)
+			if err != nil {
+				b.Fatalf("benchmark contained bad move string: %s", m)
+			}
+			err = g.Play(move)
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
 	}
 }
 
 func BenchmarkRandomGame(b *testing.B) {
+	g := NewGame(19, 19)
+	g.SetRules("NZ")
 	for i := 0; i < b.N; i++ {
-		g := NewGame(19, 19)
-		g.SetRules("NZ")
+		g.Reset()
 		rand.Seed(1)
 		for j := 0; j < 300; j++ {
 			var player int8
@@ -53,26 +62,6 @@ func BenchmarkRandomGame(b *testing.B) {
 			g.Play(NewMove(player, row, col))
 		}
 	}
-}
-
-func playMoveSequence(height, width int, moveSequence []string, ruleset string) error {
-	g := NewGame(height, width)
-	err := g.SetRules(ruleset)
-	if err != nil {
-		return fmt.Errorf("benchmark contains invalid ruleset: %s", ruleset)
-	}
-
-	for _, m := range moveSequence {
-		move, err := NewMoveFromString(m)
-		if err != nil {
-			return fmt.Errorf("benchmark contained bad move string: %s", m)
-		}
-		err = g.Play(move)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func TestBasicGamePlayCheck(t *testing.T) {
@@ -140,6 +129,47 @@ func TestBasicGamePlayCheck(t *testing.T) {
 		}
 	}
 
+}
+
+func TestGameSetup(t *testing.T) {
+	g := NewGame(3, 3)
+	g.Play(NewMove(1, 0, 1))
+	err := g.Setup(NewMove(-1, 5, 5))
+	if !errors.Is(err, ErrOutsideBoard) {
+		t.Fatal("setup allowed outside of board move")
+	}
+	err = g.Setup(NewMove(-1, 0, 1))
+	if err != nil {
+		t.Fatal("setup did not allow an illegal move")
+	}
+	if g.turn != -1 {
+		t.Fatal("setup switched player turn")
+	}
+	if g.board.flatArray[1] != -1 {
+		t.Fatal("setup did not place a stone")
+	}
+	if g.prevBoards[0].flatArray[1] != 1 {
+		t.Fatal("setup corrupted prevBoards")
+	}
+	if g.prevHashes[0] == g.board.hash {
+		t.Fatal("setup did not update hash")
+	}
+}
+
+func TestGameReset(t *testing.T) {
+	g := NewGame(19, 19)
+	startBoard := g.board.Copy()
+	g.Play(NewMove(1, 1, 1))
+	g.Reset()
+	if !g.board.Equals(startBoard) {
+		t.Fatal("reset game did not match start board")
+	}
+	if !(g.turn == 1) {
+		t.Fatal("reset game had wrong start player")
+	}
+	if !(len(g.prevTurns) == 0 && len(g.prevBoards) == 0 && len(g.prevHashes) == 0) {
+		t.Fatal("reset game retained previous information")
+	}
 }
 
 func TestBasicGroupExpansion(t *testing.T) {
@@ -221,11 +251,11 @@ func TestBoardManipulation(t *testing.T) {
 	// Exist
 	v := vertex{4, 6}
 	if b.exists(v) {
-		t.Fatalf("vertex (%d, %d) existed on %dx%d board", v.row, v.col, b.height, b.width)
+		t.Fatalf("vertex (%d, %d) existed on %dx%d board", v[0], v[1], b.height, b.width)
 	}
 	v = vertex{4, 5}
 	if !b.exists(v) {
-		t.Fatalf("vertex (%d, %d) did not exist on %dx%d board", v.row, v.col, b.height, b.width)
+		t.Fatalf("vertex (%d, %d) did not exist on %dx%d board", v[0], v[1], b.height, b.width)
 	}
 
 	// Place and look
@@ -291,24 +321,4 @@ func TestMovePrint(t *testing.T) {
 	if m.String() != "W?f" {
 		t.Fatalf("invalid move \"Bf?\" printed incorrectly as %q", m)
 	}
-}
-
-func TestVertexAdjacent(t *testing.T) {
-
-	v := vertex{1, 1}
-
-	// Board size required to get each number of adjacent vertices
-	testCombos := map[int][2]int{
-		4: [2]int{3, 3},
-		3: [2]int{3, 2},
-		2: [2]int{2, 2},
-	}
-
-	for expected, dims := range testCombos {
-		num := len(v.adjacent(dims[0], dims[1]))
-		if num != expected {
-			t.Fatalf("got %d adjacent vertices for vertex (%d, %d) on %dx%d board, want %d", num, v.row, v.col, dims[0], dims[1], expected)
-		}
-	}
-
 }
