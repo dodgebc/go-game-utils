@@ -28,7 +28,7 @@ func BenchmarkAlphaGo(b *testing.B) {
 		"Bqs", "Wrs", "Boh", "Wsl", "Bof", "Wsj", "Bni", "Wnj", "Boo", "Wjp",
 	}
 	g := NewGame(19, 19)
-	_ = g.SetRules("NZ")
+	g.SetRules("NZ")
 	for i := 0; i < b.N; i++ {
 		g.Reset()
 		for _, m := range moveSequence {
@@ -131,6 +131,26 @@ func TestBasicGamePlayCheck(t *testing.T) {
 
 }
 
+func TestFakeHashCollision(t *testing.T) {
+
+	// Figure out what the hash is going to be
+	g := NewGame(3, 3)
+	g.SetRules("TT")
+	g.Play(NewMove(1, 0, 1))
+	g.Play(NewMove(-1, 1, 1))
+	recordHash := g.board.hash
+
+	// Simulate a hash collision
+	g.Reset()
+	g.Play(NewMove(1, 0, 1))
+	g.prevHashes[0] = recordHash
+	err := g.Play(NewMove(-1, 1, 1))
+	if err != nil {
+		t.Fatal("hash collision was not handled")
+	}
+}
+
+// ADD A SETUP TEST INTEGRATING WITH REAL MOVES AND A KO!
 func TestGameSetup(t *testing.T) {
 	g := NewGame(3, 3)
 	g.Play(NewMove(1, 0, 1))
@@ -142,17 +162,17 @@ func TestGameSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal("setup did not allow an illegal move")
 	}
-	if g.turn != -1 {
-		t.Fatal("setup switched player turn")
+	if g.turn != 1 {
+		t.Fatal("setup did not switch player turn")
 	}
 	if g.board.flatArray[1] != -1 {
 		t.Fatal("setup did not place a stone")
 	}
-	if g.prevBoards[0].flatArray[1] != 1 {
-		t.Fatal("setup corrupted prevBoards")
-	}
 	if g.prevHashes[0] == g.board.hash {
 		t.Fatal("setup did not update hash")
+	}
+	if len(g.prevMoves) != 2 {
+		t.Fatal("setup did not record move")
 	}
 }
 
@@ -164,10 +184,13 @@ func TestGameReset(t *testing.T) {
 	if !g.board.Equals(startBoard) {
 		t.Fatal("reset game did not match start board")
 	}
+	if g.board.hash != startBoard.hash {
+		t.Fatal("reset game did not match start board hash")
+	}
 	if !(g.turn == 1) {
 		t.Fatal("reset game had wrong start player")
 	}
-	if !(len(g.prevTurns) == 0 && len(g.prevBoards) == 0 && len(g.prevHashes) == 0) {
+	if !(len(g.prevMoves) == 0 && len(g.prevHashes) == 0) {
 		t.Fatal("reset game retained previous information")
 	}
 }
@@ -183,7 +206,8 @@ func TestBasicGroupExpansion(t *testing.T) {
 	b.place(NewMove(-1, 2, 1))
 	b.place(NewMove(1, 2, 2))
 
-	p := newGroup(vertex{0, 1}, b)
+	var p group
+	p.expandAll(vertex{0, 1}, b)
 	if len(p.interior) != 3 {
 		t.Fatal("group expansion failed to find all connected vertices")
 	}
@@ -194,7 +218,7 @@ func TestBasicGroupExpansion(t *testing.T) {
 		t.Fatal("group expansion incorrectly marked group as dead")
 	}
 
-	p = newGroup(vertex{2, 1}, b)
+	p.expandAll(vertex{2, 1}, b)
 	if p.alive {
 		t.Fatal("group expansion incorrectly marked group as alive")
 	}
@@ -204,18 +228,21 @@ func TestBasicGroupExpansion(t *testing.T) {
 func TestBasicGroupRemoval(t *testing.T) {
 
 	b := newBoard(2, 2)
+	var p group
 
 	// Diagonal stones
 	b.place(Move{Color: 1, vertex: vertex{0, 0}})
 	b.place(Move{Color: 1, vertex: vertex{1, 1}})
-	b.remove(newGroup(vertex{0, 0}, b))
+	p.expandAll(vertex{0, 0}, b)
+	b.remove(p)
 	if b.look(vertex{1, 1}) != 1 {
 		t.Fatal("group removal took diagonal stones")
 	}
 
 	// Adjacent stones
 	b.place(Move{Color: 1, vertex: vertex{1, 0}})
-	b.remove(newGroup(vertex{1, 0}, b))
+	p.expandAll(vertex{1, 0}, b)
+	b.remove(p)
 	if b.look(vertex{1, 1}) != 0 {
 		t.Fatal("group removal did not take adjacent stones")
 	}

@@ -104,6 +104,15 @@ func (b *board) Copy() board {
 	return b2
 }
 
+func (b *board) CopyFrom(b2 board) {
+	if (b.height != b2.height) || (b.width != b2.width) {
+		b.flatArray = make([]int8, b2.height*b2.width)
+	}
+	copy(b.flatArray, b2.flatArray)
+	b.hash = b2.hash
+	b.hashTable = b2.hashTable
+}
+
 func (b board) String() string {
 	var rowCrosses, colCrosses []int // Where to put crosses (update this for other board sizes)
 	if (b.height == 19) && (b.width == 19) {

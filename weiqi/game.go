@@ -11,27 +11,29 @@ Rulesets available:
 Game scoring is not supported yet.*/
 package weiqi
 
-const gameCap = 64
-
 // Game stores Go game information and its methods allow for game control
 type Game struct {
-	turn       int8
-	board      board
-	prevTurns  []int8
-	prevBoards []board
-	prevHashes []int
-	rules      rules
+	// game state
+	turn  int8
+	board board
+	rules rules
+
+	// game history
+	prevMoves   []Move
+	prevHashes  []int
+	TrustHashes bool // rely only on hashes for ko
+
+	// these eliminate new allocations on each turn
+	workingGroup group
+	nextBoard    board
 }
 
-// NewGame starts a new game with unrestricted rules
+// NewGame starts a new game with NZ rules as default
 func NewGame(height, width int) Game {
 	b := newBoard(height, width)
-	r, _ := newRules("")
-
-	g := Game{turn: 1, board: b, rules: r}
-	g.prevTurns = make([]int8, 0, gameCap)
-	g.prevBoards = make([]board, 0, gameCap)
-	g.prevHashes = make([]int, 0, gameCap)
+	b2 := newBoard(height, width)
+	r, _ := newRules("NZ")
+	g := Game{turn: 1, board: b, nextBoard: b2, rules: r}
 	return g
 }
 
@@ -49,25 +51,26 @@ func (g *Game) SetRules(ruleset string) error {
 func (g *Game) Reset() {
 	g.turn = 1
 	g.board.clear()
-	g.prevTurns = g.prevTurns[:0]
-	g.prevBoards = g.prevBoards[:0]
+	g.prevMoves = g.prevMoves[:0]
 	g.prevHashes = g.prevHashes[:0]
 }
 
-func (g *Game) playOrCheck(m Move, playMode string) error {
+// handles "play", "check", "setup" play modes
+func (g *Game) playWithMode(m Move, playMode string) error {
 
 	// Wrong player
 	if m.Color != g.turn {
-		return GameError{ErrWrongPlayer, m}
+		if playMode != "setup" {
+			return GameError{ErrWrongPlayer, m}
+		}
 	}
 
 	// Pass is always legal (if correct player)
 	if m.pass {
-		if playMode == "play" {
+		if playMode != "check" {
 			g.turn = -m.Color
-			g.prevTurns = append(g.prevTurns, m.Color)
-			g.prevBoards = append(g.prevBoards, g.board)
-			g.prevHashes = append(g.prevHashes, g.prevHashes[len(g.prevHashes)-1])
+			g.prevMoves = append(g.prevMoves, m)
+			g.prevHashes = append(g.prevHashes, g.board.hash)
 		}
 		return nil
 	}
@@ -80,24 +83,26 @@ func (g *Game) playOrCheck(m Move, playMode string) error {
 	// Vertex not empty
 	emptyColor := g.board.look(m.vertex)
 	if emptyColor != 0 {
-		return GameError{ErrVertexNotEmpty, m}
+		if playMode != "setup" {
+			return GameError{ErrVertexNotEmpty, m}
+		}
 	}
 
-	// Copy board and place move
-	nextBoard := g.board.Copy()
-	nextBoard.place(m)
+	// Place move
+	g.nextBoard.CopyFrom(g.board)
+	g.nextBoard.place(m)
 
 	// Clear opponent stones
 	oppStonesRemoved := false
 	for i := 0; i < 2; i++ { // Loop over adjacent vertices
 		for j := -1; j < 2; j += 2 {
 			adj := vertex{m.vertex[0] + i*j, m.vertex[1] + (1-i)*j}
-			if (adj[0] >= 0) && (adj[0] < nextBoard.height) && (adj[1] >= 0) && (adj[1] < nextBoard.width) {
-				adjColor := nextBoard.look(adj)
+			if (adj[0] >= 0) && (adj[0] < g.nextBoard.height) && (adj[1] >= 0) && (adj[1] < g.nextBoard.width) {
+				adjColor := g.nextBoard.look(adj)
 				if adjColor == -m.Color {
-					group := newGroupIfDead(adj, nextBoard)
-					if !group.alive {
-						nextBoard.remove(group)
+					g.workingGroup.expandAllIfDead(adj, g.nextBoard)
+					if !g.workingGroup.alive {
+						g.nextBoard.remove(g.workingGroup)
 						oppStonesRemoved = true
 					}
 				}
@@ -107,24 +112,34 @@ func (g *Game) playOrCheck(m Move, playMode string) error {
 
 	// Clear own stones
 	if !oppStonesRemoved {
-		group := newGroupIfDead(m.vertex, nextBoard)
-		if !group.alive {
+		g.workingGroup.expandAllIfDead(m.vertex, g.nextBoard)
+		if !g.workingGroup.alive {
 			if g.rules.suicideForbidden {
 				return GameError{ErrSuicide, m}
 			}
-			nextBoard.remove(group)
+			g.nextBoard.remove(g.workingGroup)
 		}
 	}
 
-	// Check ko violation
-	if g.rules.positionalSuperko || g.rules.situationalSuperko { // But only if ruleset deems it necessary
-		for i := range g.prevTurns {
-			if nextBoard.hash == g.prevHashes[i] { // Putting hash comparison here instead of Equals() is required for speed
-				if nextBoard.Equals(g.prevBoards[i]) {
+	// Check ko violation (if ruleset deems it necessary)
+	if (g.rules.positionalSuperko || g.rules.situationalSuperko) && (playMode != "setup") {
+		for i := range g.prevMoves {
+			if g.nextBoard.hash == g.prevHashes[i] {
+				confirmedRepeat := true
+				if !g.TrustHashes {
+					replayGame := NewGame(g.board.height, g.board.width) // Replay game to check boards
+					for _, m := range g.prevMoves[:i+1] {
+						replayGame.Setup(m)
+					}
+					if !g.nextBoard.Equals(replayGame.board) {
+						confirmedRepeat = false
+					}
+				}
+				if confirmedRepeat {
 					if g.rules.positionalSuperko {
 						return GameError{ErrPositionalSuperko, m}
 					}
-					if m.Color == g.prevTurns[i] {
+					if m.Color == g.prevMoves[i].Color {
 						return GameError{ErrSituationalSuperko, m}
 					}
 				}
@@ -132,42 +147,31 @@ func (g *Game) playOrCheck(m Move, playMode string) error {
 		}
 	}
 
-	// Update game state
-	if playMode == "play" {
+	// Update game state (this is also potentially updated for passes above)
+	if playMode != "check" {
 		g.turn = -m.Color
-		g.board = nextBoard
-		g.prevTurns = append(g.prevTurns, m.Color)          // When modifying these,
-		g.prevBoards = append(g.prevBoards, nextBoard)      // must also modify the
-		g.prevHashes = append(g.prevHashes, nextBoard.hash) // early return cases above.
+		g.board.CopyFrom(g.nextBoard)
+		g.prevMoves = append(g.prevMoves, m)
+		g.prevHashes = append(g.prevHashes, g.board.hash)
 	}
-
 	return nil
-
 }
 
 // Play plays a move if it is legal
 func (g *Game) Play(m Move) error {
-	return g.playOrCheck(m, "play")
+	return g.playWithMode(m, "play")
 }
 
 // Check checks move legality but does not alter the game state
 func (g *Game) Check(m Move) error {
-	return g.playOrCheck(m, "check")
+	return g.playWithMode(m, "check")
 }
 
 // Setup allows arbitrary moves to be played for setup purposes.
-// The game state is relatively unaffected, but hashes are updated.
+// Everything behaves like a normal move except for legality checks.
 // The only possible error is ErrOutsideBoard for invalid vertices.
 func (g *Game) Setup(m Move) error {
-	// Can never play a move outside of board
-	if !g.board.exists(m.vertex) {
-		return GameError{ErrOutsideBoard, m}
-	}
-	// Copy board and place move (must always copy so as not to affect prevBoards)
-	nextBoard := g.board.Copy()
-	nextBoard.place(m)
-	g.board = nextBoard
-	return nil
+	return g.playWithMode(m, "setup")
 }
 
 func (g Game) String() string {

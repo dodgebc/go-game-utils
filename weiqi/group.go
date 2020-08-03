@@ -1,47 +1,41 @@
 package weiqi
 
-// initial capacities before expansion
-// (these don't matter too much)
-const (
-	edgeCap     = 2
-	interiorCap = 2
-)
-
 // group tracks a group of connected stones
+// it can be used immediately and reused easily
 type group struct {
 	edge     []vertex
 	interior []vertex
 	alive    bool
 }
 
-// newGroup finds all the connected stones from a vertex
-func newGroup(v vertex, b board) group {
-	var p group
-	p.edge = make([]vertex, 1, edgeCap)
-	p.edge[0] = v
-	p.interior = make([]vertex, 0, interiorCap)
+// expandAll finds all connected stones
+func (p *group) expandAll(v vertex, b board) {
+	p.edge = p.edge[:0]
+	p.interior = p.interior[:0]
+	p.alive = false
+	p.edge = append(p.edge, v)
+
 	for p.expand(b) > 0 {
-		continue
 	}
-	return p
 }
 
-// newGroupIfDead stops expanding if group is confirmed alive (for speed)
-func newGroupIfDead(v vertex, b board) group {
-	var p group
-	p.edge = make([]vertex, 1, edgeCap)
-	p.edge[0] = v
-	p.interior = make([]vertex, 0, interiorCap)
-	for p.expand(b) > 0 {
-		if p.alive {
-			p.edge = p.edge[:0]
-			p.interior = p.interior[:0]
-			break
-		}
+// expandAllIfDead finds all connected stones, unless the group is alive
+func (p *group) expandAllIfDead(v vertex, b board) {
+	p.edge = p.edge[:0]
+	p.interior = p.interior[:0]
+	p.alive = false
+	p.edge = append(p.edge, v)
+
+	for p.expand(b) > 0 && !p.alive {
 	}
-	return p
+	if p.alive {
+		p.edge = p.edge[:0]
+		p.interior = p.interior[:0]
+	}
 }
 
+// expand grows the group to include more connected stones and returns the number added
+// when it returns 0, the group is complete
 func (p *group) expand(b board) int {
 
 	oldEdgeLen := len(p.edge)
