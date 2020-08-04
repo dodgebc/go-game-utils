@@ -44,14 +44,14 @@ func (p *group) expand(b board) int {
 
 	// Loop over old edge of group
 	for _, v := range p.interior[len(p.interior)-oldEdgeLen:] {
-		vColor := b.look(v)
+		vColor := b.flatArray[v[0]*b.width+v[1]]
 
 		// Loop over adjacent vertices
 		for i := 0; i < 2; i++ {
 			for j := -1; j < 2; j += 2 {
 				adj := vertex{v[0] + i*j, v[1] + (1-i)*j}
 				if (adj[0] >= 0) && (adj[0] < b.height) && (adj[1] >= 0) && (adj[1] < b.width) {
-					adjColor := b.look(adj) //b.flatArray[adj[0]*b.width+adj[1]]
+					adjColor := b.flatArray[adj[0]*b.width+adj[1]]
 					switch adjColor {
 					case vColor: // Same color, maybe we should expand group to include
 						shouldAdd := true
@@ -68,7 +68,7 @@ func (p *group) expand(b board) int {
 						if shouldAdd {
 							p.edge = append(p.edge, adj)
 						}
-					case 0: // Liberty, group is alive
+					case 0: // Liberty, group is alive (SPEED: should be possible to return immediately if called by expandAllIfDead, probably insignificant)
 						p.alive = true
 					}
 				}

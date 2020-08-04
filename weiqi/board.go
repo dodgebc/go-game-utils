@@ -53,6 +53,7 @@ func (b *board) exists(v vertex) bool {
 }
 
 // look retrieves the color at a vertex
+// not using this except for tests & stringer because it does not get inlined
 func (b *board) look(v vertex) int8 {
 	return b.flatArray[v[0]*b.width+v[1]]
 }
@@ -105,8 +106,10 @@ func (b *board) Copy() board {
 }
 
 func (b *board) CopyFrom(b2 board) {
-	if (b.height != b2.height) || (b.width != b2.width) {
+	if (b.height*b.width != b2.height) || (b.width != b2.width) {
 		b.flatArray = make([]int8, b2.height*b2.width)
+		b.height = b2.height
+		b.width = b2.width
 	}
 	copy(b.flatArray, b2.flatArray)
 	b.hash = b2.hash

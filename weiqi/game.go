@@ -11,17 +11,25 @@ Rulesets available:
 Game scoring is not supported yet.*/
 package weiqi
 
+import (
+	"fmt"
+)
+
 // Game stores Go game information and its methods allow for game control
 type Game struct {
 	// game state
 	turn  int8
 	board board
-	rules rules
 
 	// game history
 	prevMoves   []Move
 	prevHashes  []int
 	TrustHashes bool // rely only on hashes for ko
+
+	// game rules
+	SuicideForbidden   bool
+	SituationalSuperko bool
+	PositionalSuperko  bool
 
 	// these eliminate new allocations on each turn
 	workingGroup group
@@ -32,18 +40,28 @@ type Game struct {
 func NewGame(height, width int) Game {
 	b := newBoard(height, width)
 	b2 := newBoard(height, width)
-	r, _ := newRules("NZ")
-	g := Game{turn: 1, board: b, nextBoard: b2, rules: r}
+	g := Game{turn: 1, board: b, nextBoard: b2}
+	g.SetRules("NZ")
 	return g
 }
 
 // SetRules configures the ruleset used ("NZ", "AGA", "TT", or "")
 func (g *Game) SetRules(ruleset string) error {
-	r, err := newRules(ruleset)
-	if err != nil {
-		return err
+	g.SuicideForbidden = false
+	g.SituationalSuperko = false
+	g.PositionalSuperko = false
+	switch ruleset {
+	case "NZ":
+		g.SituationalSuperko = true
+	case "AGA":
+		g.SuicideForbidden = true
+		g.SituationalSuperko = true
+	case "TT":
+		g.PositionalSuperko = true
+	case "":
+	default:
+		return fmt.Errorf("did not recognize ruleset: %s", ruleset)
 	}
-	g.rules = r
 	return nil
 }
 
@@ -81,7 +99,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 	}
 
 	// Vertex not empty
-	emptyColor := g.board.look(m.vertex)
+	emptyColor := g.board.flatArray[m.vertex[0]*g.board.width+m.vertex[1]]
 	if emptyColor != 0 {
 		if playMode != "setup" {
 			return GameError{ErrVertexNotEmpty, m}
@@ -98,7 +116,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 		for j := -1; j < 2; j += 2 {
 			adj := vertex{m.vertex[0] + i*j, m.vertex[1] + (1-i)*j}
 			if (adj[0] >= 0) && (adj[0] < g.nextBoard.height) && (adj[1] >= 0) && (adj[1] < g.nextBoard.width) {
-				adjColor := g.nextBoard.look(adj)
+				adjColor := g.nextBoard.flatArray[adj[0]*g.nextBoard.width+adj[1]]
 				if adjColor == -m.Color {
 					g.workingGroup.expandAllIfDead(adj, g.nextBoard)
 					if !g.workingGroup.alive {
@@ -114,7 +132,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 	if !oppStonesRemoved {
 		g.workingGroup.expandAllIfDead(m.vertex, g.nextBoard)
 		if !g.workingGroup.alive {
-			if g.rules.suicideForbidden {
+			if g.SuicideForbidden && (playMode != "setup") {
 				return GameError{ErrSuicide, m}
 			}
 			g.nextBoard.remove(g.workingGroup)
@@ -122,7 +140,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 	}
 
 	// Check ko violation (if ruleset deems it necessary)
-	if (g.rules.positionalSuperko || g.rules.situationalSuperko) && (playMode != "setup") {
+	if (g.PositionalSuperko || g.SituationalSuperko) && (playMode != "setup") {
 		for i := range g.prevMoves {
 			if g.nextBoard.hash == g.prevHashes[i] {
 				confirmedRepeat := true
@@ -136,7 +154,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 					}
 				}
 				if confirmedRepeat {
-					if g.rules.positionalSuperko {
+					if g.PositionalSuperko {
 						return GameError{ErrPositionalSuperko, m}
 					}
 					if m.Color == g.prevMoves[i].Color {

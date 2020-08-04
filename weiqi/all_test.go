@@ -64,17 +64,16 @@ func BenchmarkRandomGame(b *testing.B) {
 	}
 }
 
-func TestBasicGamePlayCheck(t *testing.T) {
-
-	g := NewGame(3, 3)
+func TestBasicGamePlayCheckSetup(t *testing.T) {
 
 	// This sequence of moves tests a simple case of each possible game error
+	// It is designed to partially verify Play, Check, and Setup behavior at the same time
 	// "m" is the move string
 	// "e" is the expected error
 	// "r" is the ruleset to be applied BEFORE the move
 	testTable := []map[string]interface{}{
 		{"m": "Bba"},
-		{"m": "Bcc", "e": ErrWrongPlayer},
+		{"m": "Bab", "e": ErrWrongPlayer},
 		{"m": "W"},
 		{"m": "Bee", "e": ErrOutsideBoard},
 		{"m": "Bba", "e": ErrVertexNotEmpty},
@@ -99,13 +98,16 @@ func TestBasicGamePlayCheck(t *testing.T) {
 		{"m": "Bab", "r": "NZ"},
 	}
 
-	var err1, err2 error
+	g := NewGame(3, 3)
+	g3 := NewGame(3, 3)
+	var err1, err2, err3 error
 
 	for i := range testTable {
 
 		// Switch up the rules at various points
 		if testTable[i]["r"] != nil {
 			g.SetRules(testTable[i]["r"].(string))
+			g3.SetRules(testTable[i]["r"].(string))
 		}
 
 		// Play and Check should be consistent
@@ -118,6 +120,12 @@ func TestBasicGamePlayCheck(t *testing.T) {
 		if err1 != err2 {
 			t.Fatalf("inconsistent error from Check and Play on move %d: %v, %v", i, err1, err2)
 		}
+		err3 = g3.Setup(m)
+		if err3 != nil {
+			if !errors.Is(err3, ErrOutsideBoard) {
+				t.Fatalf("setup returned an inappropriate error: %s", err3)
+			}
+		}
 
 		// Verify that we get the error we expect
 		var expected error
@@ -127,6 +135,9 @@ func TestBasicGamePlayCheck(t *testing.T) {
 		if !errors.Is(err1, expected) {
 			t.Fatalf("unexpected game error on move %d: %v", i, err1)
 		}
+	}
+	if !g.board.Equals(g3.board) {
+		t.Fatal("play and setup boards did not match")
 	}
 
 }
