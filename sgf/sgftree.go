@@ -28,24 +28,30 @@ ValueType  = (None | Number | Real | Double | Color | SimpleText | Text | Point 
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"unicode"
 )
 
+// Node contains key/value(s) pairs
+type Node map[string][]string
+
 // GameTree is a sequence of nodes potentially followed by other GameTrees (per SGF spec)
 type GameTree struct {
-	Sequence Sequence
+	Nodes    []Node
 	Children []*GameTree
+
+	// state variables for parsing
+	currentNode             Node
+	currentIdentifierString string
+	currentIdentifier       strings.Builder
+	currentValue            strings.Builder
+	escaped                 bool
+	whitespace              bool
 }
 
 // NewGameTree parses text in SGF format into a GameTree
 func NewGameTree(sgfText string) (GameTree, error) {
-	re := regexp.MustCompile(`[^\S ]+`)
-	// Using regexp might be a little slow... idea is to have just a SINGLE pass
-	// Can easily do this in loop below if necessary
-	sgfRunes := []rune(re.ReplaceAllString(sgfText, " ")) // for easy character indexing
 
 	// Parse setup
 	brackOpen := false
@@ -55,12 +61,11 @@ func NewGameTree(sgfText string) (GameTree, error) {
 	stack = append(stack, &root)
 
 	// Iterative tree parsing (single pass)
-	for _, r := range sgfRunes {
+	for _, r := range sgfText {
 
 		// Mark property values
 		isValue := false
-		switch {
-		case brackOpen:
+		if brackOpen {
 			isValue = true
 			if escaped {
 				escaped = false
@@ -70,37 +75,32 @@ func NewGameTree(sgfText string) (GameTree, error) {
 				brackOpen = false
 				isValue = false
 			}
-		case r == '[':
+		} else if r == '[' {
 			brackOpen = true
 		}
 
 		// Expand tree
-		switch {
-		case !isValue:
+		if isValue {
+			err := stack[len(stack)-1].addRune(r, true)
+			if err != nil {
+				return GameTree{}, err
+			}
+		} else {
 			if r == '(' {
 				add := new(GameTree)
 				stack[len(stack)-1].Children = append(stack[len(stack)-1].Children, add)
 				stack = append(stack, add)
 			} else if r == ')' {
 				if len(stack) > 1 {
-					err := stack[len(stack)-1].Sequence.finish()
-					if err != nil {
-						return GameTree{}, err
-					}
 					stack = stack[:len(stack)-1]
 				} else {
 					return GameTree{}, fmt.Errorf("missing open parenthesis")
 				}
 			} else {
-				err := stack[len(stack)-1].Sequence.addRune(r, false)
+				err := stack[len(stack)-1].addRune(r, false)
 				if err != nil {
 					return GameTree{}, err
 				}
-			}
-		case isValue:
-			err := stack[len(stack)-1].Sequence.addRune(r, true)
-			if err != nil {
-				return GameTree{}, err
 			}
 		}
 	}
@@ -110,17 +110,16 @@ func NewGameTree(sgfText string) (GameTree, error) {
 	if len(stack) > 1 {
 		return GameTree{}, fmt.Errorf("missing close parenthesis")
 	}
-	stack[0].Sequence.finish()
 	return root, nil
 }
 
 // Equals checks GameTree equality recursively
 func (gt *GameTree) Equals(gt2 *GameTree) bool {
-	if len(gt.Sequence.Nodes) != len(gt2.Sequence.Nodes) {
+	if len(gt.Nodes) != len(gt2.Nodes) {
 		return false
 	}
-	nodes := gt.Sequence.Nodes
-	nodes2 := gt2.Sequence.Nodes
+	nodes := gt.Nodes
+	nodes2 := gt2.Nodes
 	for i := range nodes {
 		for k := range nodes[i] {
 			if len(nodes[i][k]) != len(nodes2[i][k]) {
@@ -146,15 +145,15 @@ func (gt *GameTree) Equals(gt2 *GameTree) bool {
 
 func (gt GameTree) String() string {
 	s := "\n"
-	for i := range gt.Sequence.Nodes {
+	for i := range gt.Nodes {
 		keys := []string{}
-		for k := range gt.Sequence.Nodes[i] {
+		for k := range gt.Nodes[i] {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
 			s += k
-			for _, v := range gt.Sequence.Nodes[i][k] {
+			for _, v := range gt.Nodes[i][k] {
 				s += "{" + v + "}"
 			}
 			s += " "
@@ -168,74 +167,48 @@ func (gt GameTree) String() string {
 	return s
 }
 
-// Node contains key/value(s) pairs
-type Node map[string][]string
-
-// Sequence contains Nodes (per SGF spec)
-type Sequence struct {
-	Nodes         []Node // Each identifier may only appear once in SGF, but can have multiple values
-	runeBuffer    []rune
-	isValueBuffer []bool
-	started       bool
-}
-
-// CHANGE: Should put the addNode code in here, this will streamline things A LOT.
-// No need for finish() then either.
-func (s *Sequence) addRune(r rune, isValue bool) error {
-	defer func() { s.started = true }()
-	if (r == ';') && !isValue && s.started { // Beginning of next node
-		err := s.addNode(s.runeBuffer, s.isValueBuffer)
-		if err != nil {
-			return err
-		}
-		s.runeBuffer = s.runeBuffer[:0]
-		s.isValueBuffer = s.isValueBuffer[:0]
-	} else if ((r != ';') && !isValue) || isValue { // Interior of node
-		s.runeBuffer = append(s.runeBuffer, r)
-		s.isValueBuffer = append(s.isValueBuffer, isValue)
-	}
-	return nil
-}
-
-func (s *Sequence) finish() error {
-	if s.started {
-		err := s.addNode(s.runeBuffer, s.isValueBuffer)
-		if err != nil {
-			return err
-		}
-	}
-	s.runeBuffer = s.runeBuffer[:0]
-	s.isValueBuffer = s.isValueBuffer[:0]
-	return nil
-}
-
-func (s *Sequence) addNode(content []rune, isValue []bool) error {
-	node := make(map[string][]string)
-	identifier := ""
-	escaped := false // We don't want escape artifacts in our final output
-
-	for i, r := range content { // This should be the stuff between semicolons
-		switch {
-		case !isValue[i] && !unicode.IsSpace(r) && (r != '[') && (r != ']'): // Part of identifier we care about
-			if len(node[identifier]) == 0 {
-				// No values seen yet (we are still reading through an identifier)
-				identifier += string(r)
-			} else {
-				// Already saw values, we should keep them with the previous identifier and start a new one
-				identifier = string(r)
+func (gt *GameTree) addRune(r rune, isValue bool) error {
+	if isValue { // Inside a value
+		if unicode.IsSpace(r) && (r != ' ') { // Strip non-space whitespace
+			if !gt.whitespace {
+				gt.currentValue.WriteRune(' ')
 			}
-		case !isValue[i] && (r == '['): // Signifies start of a new value
-			node[identifier] = append(node[identifier], "")
-			escaped = false
-		case isValue[i]: // Add value runes (except for escaping backslash)
-			if !escaped && (r == '\\') {
-				escaped = true
-			} else {
-				node[identifier][len(node[identifier])-1] += string(r) // Slow
-				escaped = false
+			gt.whitespace = true
+		} else if (r == '\\') && !gt.escaped { // Don't record escape characters
+			gt.escaped = true
+			gt.whitespace = false
+		} else {
+			gt.currentValue.WriteRune(r) // Update current value
+			gt.escaped = false
+			gt.whitespace = false
+		}
+	} else { // Control rune
+		gt.whitespace = false
+		if gt.escaped {
+			return fmt.Errorf("bug: escaped character outside of value")
+		}
+		if r == ';' { // Start of a new node
+			if gt.currentValue.Len() != 0 {
+				return fmt.Errorf("value did not end: %s", gt.currentValue.String())
+			}
+			gt.currentIdentifier.Reset()
+			gt.currentNode = make(Node)
+			gt.Nodes = append(gt.Nodes, gt.currentNode)
+		} else if r == '[' { // Start of a value
+			gt.currentIdentifierString = gt.currentIdentifier.String()
+		} else if r == ']' { // End of a value
+			id := gt.currentIdentifierString
+			gt.currentNode[id] = append(gt.currentNode[id], gt.currentValue.String())
+			gt.currentValue.Reset()
+		} else if unicode.IsUpper(r) { // Part of an identifier
+			if gt.currentIdentifierString == "" { // Update current identifier
+				gt.currentIdentifier.WriteRune(r)
+			} else { // Begin a new identifier
+				gt.currentIdentifier.Reset()
+				gt.currentIdentifier.WriteRune(r)
+				gt.currentIdentifierString = ""
 			}
 		}
 	}
-	s.Nodes = append(s.Nodes, node)
 	return nil
 }

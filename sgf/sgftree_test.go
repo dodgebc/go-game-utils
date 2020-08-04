@@ -50,18 +50,20 @@ func TestSgfError(t *testing.T) {
 
 func TestSgfEscape(t *testing.T) {
 	sgfText := `;;HI[\]yo;
-	()\\  ][[[];`
+	()\\  
+	][
+	[[];`
 
 	gt, err := NewGameTree(sgfText)
 	if err != nil {
 		t.Fatal(err)
 	}
 	expected := GameTree{
-		Sequence: Sequence{Nodes: []Node{
+		Nodes: []Node{
 			Node{},
-			Node{"HI": []string{"]yo; ()\\  ", "[["}},
+			Node{"HI": []string{"]yo; ()\\   ", " [["}},
 			Node{},
-		}},
+		},
 	}
 	if !gt.Equals(&expected) {
 		t.Fatalf("incorrect parse\nhave:\n%s\nwant:\n%s", gt, expected)
@@ -77,42 +79,42 @@ func TestSgfTree(t *testing.T) {
 	}
 	expected := []*GameTree{
 		&GameTree{
-			Sequence: Sequence{Nodes: []Node{
+			Nodes: []Node{
 				Node{"A": []string{""}},
 				Node{"C": []string{""}},
-			}},
+			},
 			Children: []*GameTree{
 				&GameTree{
-					Sequence: Sequence{Nodes: []Node{
+					Nodes: []Node{
 						Node{"D": []string{""}},
-					}},
+					},
 					Children: []*GameTree{
 						&GameTree{
-							Sequence: Sequence{Nodes: []Node{
+							Nodes: []Node{
 								Node{"E": []string{""}, "F": []string{""}},
-							}},
+							},
 						},
 					},
 				},
 				&GameTree{
-					Sequence: Sequence{Nodes: []Node{
+					Nodes: []Node{
 						Node{"G": []string{""}},
 						Node{"I": []string{""}},
-					}},
+					},
 					Children: []*GameTree{
 						&GameTree{
-							Sequence: Sequence{Nodes: []Node{
+							Nodes: []Node{
 								Node{"H": []string{""}},
-							}},
+							},
 						},
 					},
 				},
 			},
 		},
 		&GameTree{
-			Sequence: Sequence{Nodes: []Node{
+			Nodes: []Node{
 				Node{"J": []string{""}, "K": []string{""}},
-			}},
+			},
 		},
 		&GameTree{},
 	}
@@ -131,11 +133,11 @@ func TestSgfSimple(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := GameTree{
-		Sequence: Sequence{Nodes: []Node{
+		Nodes: []Node{
 			Node{"GM": []string{"1"}, "FF": []string{"4"}, "CA": []string{"UTF-8"}},
 			Node{"B": []string{"ab"}},
 			Node{"W": []string{"ba"}},
-		}},
+		},
 	}
 	wrapExpected := GameTree{Children: []*GameTree{&expected}}
 	if !gt.Equals(&wrapExpected) {
