@@ -2,7 +2,7 @@ package sgf
 
 import "testing"
 
-func BenchmarkOgsSgf(b *testing.B) {
+func BenchmarkOgs(b *testing.B) {
 	sgfText := ogsSgfText
 
 	for i := 0; i < b.N; i++ {
@@ -13,7 +13,16 @@ func BenchmarkOgsSgf(b *testing.B) {
 	}
 }
 
-func BenchmarkAlphaGoSgf(b *testing.B) {
+func TestOgs(t *testing.T) {
+	sgfText := ogsSgfText
+
+	_, err := NewGameTree(sgfText)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func BenchmarkAlphaGo(b *testing.B) {
 	sgfText := alphaGoSgfText
 
 	for i := 0; i < b.N; i++ {
@@ -24,35 +33,83 @@ func BenchmarkAlphaGoSgf(b *testing.B) {
 	}
 }
 
-func TestSgfError(t *testing.T) {
+func TestAlphaGo(t *testing.T) {
+	sgfText := alphaGoSgfText
 
-	// Missing open parenthesis
-	sgfText := `(;GM[1];B[ba](;W[ab])`
 	_, err := NewGameTree(sgfText)
-	if err == nil {
-		t.Fatal("no error on missing close parenthesis")
-	}
-
-	// Missing close parenthesis
-	sgfText = `;GM[1];B[ba](;W[ab]))`
-	_, err = NewGameTree(sgfText)
-	if err == nil {
-		t.Fatal("no error on missing open parenthesis")
-	}
-
-	// Missing close bracket
-	sgfText = `(;GM[1];B[ba))`
-	_, err = NewGameTree(sgfText)
-	if err == nil {
-		t.Fatal("no error on missing close bracket")
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestSgfEscape(t *testing.T) {
-	sgfText := `;;HI[\]yo;
-	()\\  
-	][
-	[[];`
+func TestError(t *testing.T) {
+
+	// Missing open parenthesis
+	sgfText := "(;GM[1];B[ba](;W[ab])"
+	_, err := NewGameTree(sgfText)
+	if err.Error() != "missing close parenthesis" {
+		t.Errorf("wrong error on missing close parenthesis: %s", err)
+	}
+
+	// Missing close parenthesis
+	sgfText = ";GM[1];B[ba](;W[ab]))"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "missing open parenthesis" {
+		t.Errorf("wrong error on missing open parenthesis: %s", err)
+	}
+
+	// Missing open bracket
+	sgfText = "(;GM[1];B]))"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "missing open bracket" {
+		t.Errorf("wrong error on missing open bracket: %s", err)
+	}
+
+	// Missing close bracket
+	sgfText = "(;GM[1];B[ba))"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "missing close bracket" {
+		t.Errorf("wrong error on missing close bracket: %s", err)
+	}
+
+	// Duplicate identifier
+	sgfText = "(;GM[1]FF[4]GM[1])"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "duplicate identifier: GM" {
+		t.Errorf("wrong error on duplicate identifier: %s", err)
+	}
+
+	// Bad tree
+	sgfText = "(;A[](;B[])C[])"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "bad tree" {
+		t.Errorf("wrong error on bad tree: %s", err)
+	}
+
+	// No semicolon before node
+	sgfText = "([])"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "bad node" {
+		t.Errorf("wrong error on bad node: %s", err)
+	}
+
+	// Lowercase identifier
+	sgfText = "(;A[]b[])"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "unexpected identifier character: 'b'" {
+		t.Errorf("wrong error on lowercase property identifier: %s", err)
+	}
+
+	// Empty identifier
+	sgfText = "(;[hey])"
+	_, err = NewGameTree(sgfText)
+	if err.Error() != "empty identifier" {
+		t.Errorf("wrong error on empty identifier: %s", err)
+	}
+}
+
+func TestEscape(t *testing.T) {
+	sgfText := ";;HI[\\]yo;\r\n()\\\\\\ \\\n] [\n[[];"
 
 	gt, err := NewGameTree(sgfText)
 	if err != nil {
@@ -61,7 +118,7 @@ func TestSgfEscape(t *testing.T) {
 	expected := GameTree{
 		Nodes: []Node{
 			Node{},
-			Node{"HI": []string{"]yo; ()\\   ", " [["}},
+			Node{Property{"HI", []string{"]yo; ()\\ ", " [["}}},
 			Node{},
 		},
 	}
@@ -70,8 +127,8 @@ func TestSgfEscape(t *testing.T) {
 	}
 }
 
-func TestSgfTree(t *testing.T) {
-	sgfText := `(;A[];C[](;D[](;E[]F[]))(;G[](;H[]);I[]))(;J[]K[])()`
+func TestTree(t *testing.T) {
+	sgfText := "(;A[];C[](;D[](;E[]F[]))(;G[];I[]))(;J[]K[])()"
 
 	gt, err := NewGameTree(sgfText)
 	if err != nil {
@@ -80,40 +137,33 @@ func TestSgfTree(t *testing.T) {
 	expected := []*GameTree{
 		&GameTree{
 			Nodes: []Node{
-				Node{"A": []string{""}},
-				Node{"C": []string{""}},
+				Node{Property{"A", []string{""}}},
+				Node{Property{"C", []string{""}}},
 			},
 			Children: []*GameTree{
 				&GameTree{
 					Nodes: []Node{
-						Node{"D": []string{""}},
+						Node{Property{"D", []string{""}}},
 					},
 					Children: []*GameTree{
 						&GameTree{
 							Nodes: []Node{
-								Node{"E": []string{""}, "F": []string{""}},
+								Node{Property{"E", []string{""}}, Property{"F", []string{""}}},
 							},
 						},
 					},
 				},
 				&GameTree{
 					Nodes: []Node{
-						Node{"G": []string{""}},
-						Node{"I": []string{""}},
-					},
-					Children: []*GameTree{
-						&GameTree{
-							Nodes: []Node{
-								Node{"H": []string{""}},
-							},
-						},
+						Node{Property{"G", []string{""}}},
+						Node{Property{"I", []string{""}}},
 					},
 				},
 			},
 		},
 		&GameTree{
 			Nodes: []Node{
-				Node{"J": []string{""}, "K": []string{""}},
+				Node{Property{"J", []string{""}}, Property{"K", []string{""}}},
 			},
 		},
 		&GameTree{},
@@ -125,8 +175,8 @@ func TestSgfTree(t *testing.T) {
 
 }
 
-func TestSgfSimple(t *testing.T) {
-	sgfText := `(;GM[1]FF[4]CA[UTF-8];B[ab];W[ba])`
+func TestSimple(t *testing.T) {
+	sgfText := "(;GM[1]FF[4]CA[UTF-8];B[ab];W[ba])"
 
 	gt, err := NewGameTree(sgfText)
 	if err != nil {
@@ -134,9 +184,9 @@ func TestSgfSimple(t *testing.T) {
 	}
 	expected := GameTree{
 		Nodes: []Node{
-			Node{"GM": []string{"1"}, "FF": []string{"4"}, "CA": []string{"UTF-8"}},
-			Node{"B": []string{"ab"}},
-			Node{"W": []string{"ba"}},
+			Node{Property{"GM", []string{"1"}}, Property{"FF", []string{"4"}}, Property{"CA", []string{"UTF-8"}}},
+			Node{Property{"B", []string{"ab"}}},
+			Node{Property{"W", []string{"ba"}}},
 		},
 	}
 	wrapExpected := GameTree{Children: []*GameTree{&expected}}

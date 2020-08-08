@@ -15,26 +15,20 @@ CValueType = (ValueType | Compose)
 ValueType  = (None | Number | Real | Double | Color | SimpleText | Text | Point  | Move | Stone)
 */
 
-// Differences from SGF spec:
-
-// Multiple identical identifiers in one node have all values collected
-// In SGF spec, this should not be allowed (an error)
-
-// Something like a(b)c will be parsed as ac(b)
-// In SGF spec, this should not be allowed (an error)
-
-// All whitespace is immediately converted to single space
-// There are some exceptions/edge cases in the SGF spec
-
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"unicode"
 )
 
-// Node contains key/value(s) pairs
-type Node map[string][]string
+// Node stores a sequence of properties
+type Node []Property
+
+// Property stores an identifier and its values
+type Property struct {
+	Identifier string
+	Values     []string
+}
 
 // GameTree is a sequence of nodes potentially followed by other GameTrees (per SGF spec)
 type GameTree struct {
@@ -42,20 +36,26 @@ type GameTree struct {
 	Children []*GameTree
 
 	// state variables for parsing
-	currentNode             Node
-	currentIdentifierString string
-	currentIdentifier       strings.Builder
-	currentValue            strings.Builder
-	escaped                 bool
-	whitespace              bool
+	currentNode       Node
+	currentIdentifier strings.Builder
+	currentValue      strings.Builder
+	newIdentifier     bool
+	escaped           bool
 }
 
 // NewGameTree parses text in SGF format into a GameTree
 func NewGameTree(sgfText string) (GameTree, error) {
 
+	// Organization:
+	// Handling parentheses, brackets, escapes, and whitespace is done here
+	// Handling semicolons and brackets (again) is done in addNodeRune
+	// There may be a better way to go about this
+
 	// Parse setup
 	brackOpen := false
 	escaped := false
+	justClosed := false
+	justOpened := false
 	var root GameTree
 	var stack []*GameTree
 	stack = append(stack, &root)
@@ -63,25 +63,53 @@ func NewGameTree(sgfText string) (GameTree, error) {
 	// Iterative tree parsing (single pass)
 	for _, r := range sgfText {
 
-		// Mark property values
+		// Mark property values and strip whitespace
 		isValue := false
 		if brackOpen {
 			isValue = true
 			if escaped {
 				escaped = false
+				if r == '\n' { // Soft line break
+					continue
+				}
 			} else if r == '\\' {
 				escaped = true
+				continue // Don't record escape backslash
 			} else if r == ']' {
 				brackOpen = false
 				isValue = false
 			}
+			if r == '\r' {
+				continue // Skip carriage returns for simplicity
+			}
+			if unicode.IsSpace(r) {
+				r = ' ' // Replace whitespace with space
+			}
 		} else if r == '[' {
 			brackOpen = true
+		} else if r == ']' {
+			return GameTree{}, fmt.Errorf("missing open bracket")
+		}
+
+		// Check for bad tree, i.e. (ab(c)d) is an error
+		if justClosed && !unicode.IsSpace(r) {
+			if (r != ')') && (r != '(') {
+				return GameTree{}, fmt.Errorf("bad tree")
+			}
+			justClosed = false
+		}
+
+		// Check for bad node, i.e. (;a;b(c)) is an error
+		if justOpened && !unicode.IsSpace(r) {
+			if (r != ';') && (r != ')') && (r != '(') {
+				return GameTree{}, fmt.Errorf("bad node")
+			}
+			justOpened = false
 		}
 
 		// Expand tree
 		if isValue {
-			err := stack[len(stack)-1].addRune(r, true)
+			err := stack[len(stack)-1].addNodeRune(r, true)
 			if err != nil {
 				return GameTree{}, err
 			}
@@ -90,14 +118,16 @@ func NewGameTree(sgfText string) (GameTree, error) {
 				add := new(GameTree)
 				stack[len(stack)-1].Children = append(stack[len(stack)-1].Children, add)
 				stack = append(stack, add)
+				justOpened = true
 			} else if r == ')' {
 				if len(stack) > 1 {
 					stack = stack[:len(stack)-1]
+					justClosed = true
 				} else {
 					return GameTree{}, fmt.Errorf("missing open parenthesis")
 				}
 			} else {
-				err := stack[len(stack)-1].addRune(r, false)
+				err := stack[len(stack)-1].addNodeRune(r, false)
 				if err != nil {
 					return GameTree{}, err
 				}
@@ -118,15 +148,19 @@ func (gt *GameTree) Equals(gt2 *GameTree) bool {
 	if len(gt.Nodes) != len(gt2.Nodes) {
 		return false
 	}
-	nodes := gt.Nodes
-	nodes2 := gt2.Nodes
-	for i := range nodes {
-		for k := range nodes[i] {
-			if len(nodes[i][k]) != len(nodes2[i][k]) {
+	for i := range gt.Nodes {
+		if len(gt.Nodes[i]) != len(gt2.Nodes[i]) {
+			return false
+		}
+		for j := range gt.Nodes[i] {
+			if gt.Nodes[i][j].Identifier != gt2.Nodes[i][j].Identifier {
 				return false
 			}
-			for j := range nodes[i][k] {
-				if nodes[i][k][j] != nodes2[i][k][j] {
+			if len(gt.Nodes[i][j].Values) != len(gt2.Nodes[i][j].Values) {
+				return false
+			}
+			for k := range gt.Nodes[i][j].Values {
+				if gt.Nodes[i][j].Values[k] != gt2.Nodes[i][j].Values[k] {
 					return false
 				}
 			}
@@ -145,15 +179,10 @@ func (gt *GameTree) Equals(gt2 *GameTree) bool {
 
 func (gt GameTree) String() string {
 	s := "\n"
-	for i := range gt.Nodes {
-		keys := []string{}
-		for k := range gt.Nodes[i] {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			s += k
-			for _, v := range gt.Nodes[i][k] {
+	for _, node := range gt.Nodes {
+		for _, prop := range node {
+			s += prop.Identifier
+			for _, v := range prop.Values {
 				s += "{" + v + "}"
 			}
 			s += " "
@@ -167,47 +196,66 @@ func (gt GameTree) String() string {
 	return s
 }
 
-func (gt *GameTree) addRune(r rune, isValue bool) error {
-	if isValue { // Inside a value
-		if unicode.IsSpace(r) && (r != ' ') { // Strip non-space whitespace
-			if !gt.whitespace {
-				gt.currentValue.WriteRune(' ')
-			}
-			gt.whitespace = true
-		} else if (r == '\\') && !gt.escaped { // Don't record escape characters
-			gt.escaped = true
-			gt.whitespace = false
-		} else {
-			gt.currentValue.WriteRune(r) // Update current value
-			gt.escaped = false
-			gt.whitespace = false
-		}
+func (gt *GameTree) addNodeRune(r rune, isValue bool) error {
+
+	if isValue { // Inside a value (edge cases should be handled in NewGameTree)
+		gt.currentValue.WriteRune(r)
+
 	} else { // Control rune
-		gt.whitespace = false
-		if gt.escaped {
-			return fmt.Errorf("bug: escaped character outside of value")
-		}
+
 		if r == ';' { // Start of a new node
 			if gt.currentValue.Len() != 0 {
 				return fmt.Errorf("value did not end: %s", gt.currentValue.String())
 			}
+			if gt.newIdentifier {
+				return fmt.Errorf("identifier did not end: %s", gt.currentIdentifier.String())
+			}
 			gt.currentIdentifier.Reset()
-			gt.currentNode = make(Node)
-			gt.Nodes = append(gt.Nodes, gt.currentNode)
-		} else if r == '[' { // Start of a value
-			gt.currentIdentifierString = gt.currentIdentifier.String()
+			gt.Nodes = append(gt.Nodes, Node{})
+
+		} else if r == '[' { // Start of a new value
+			i := len(gt.Nodes) - 1
+			ident := gt.currentIdentifier.String()
+			if i < 0 {
+				// Should not be able to occur because of bad node (no semicolon) check in NewGameTree
+				panic("bug: node was not initialized before open bracket")
+			}
+			if gt.newIdentifier {
+				for j := 0; j < len(gt.Nodes[i])-1; j++ {
+					if ident == gt.Nodes[i][j].Identifier { // Check for duplicate identifier
+						return fmt.Errorf("duplicate identifier: %s", ident)
+					}
+				}
+				gt.Nodes[i] = append(gt.Nodes[i], Property{Identifier: ident})
+				gt.newIdentifier = false
+			} else if ident == "" {
+				return fmt.Errorf("empty identifier")
+			}
+
 		} else if r == ']' { // End of a value
-			id := gt.currentIdentifierString
-			gt.currentNode[id] = append(gt.currentNode[id], gt.currentValue.String())
+			i := len(gt.Nodes) - 1
+			if i < 0 {
+				// Should not be able to occur because of missing open bracket check in NewGameTree
+				panic("bug: node was not initialized before close bracket")
+			}
+			j := len(gt.Nodes[i]) - 1
+			if j < 0 {
+				// Should not be able to occur because of missing open bracket check in NewGameTree
+				panic("bug: property was not initialized before close bracket")
+			}
+			gt.Nodes[i][j].Values = append(gt.Nodes[i][j].Values, gt.currentValue.String())
 			gt.currentValue.Reset()
+
 		} else if unicode.IsUpper(r) { // Part of an identifier
-			if gt.currentIdentifierString == "" { // Update current identifier
+			if gt.newIdentifier { // Part of current identifier
 				gt.currentIdentifier.WriteRune(r)
-			} else { // Begin a new identifier
+			} else { // Start of a new identifier
 				gt.currentIdentifier.Reset()
 				gt.currentIdentifier.WriteRune(r)
-				gt.currentIdentifierString = ""
+				gt.newIdentifier = true
 			}
+		} else if !unicode.IsSpace(r) {
+			return fmt.Errorf("unexpected identifier character: %q", r)
 		}
 	}
 	return nil
