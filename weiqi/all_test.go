@@ -57,8 +57,8 @@ func BenchmarkRandomGame(b *testing.B) {
 			} else {
 				player = -1
 			}
-			row := rand.Intn(g.board.height)
-			col := rand.Intn(g.board.width)
+			row := rand.Intn(g.board.rows)
+			col := rand.Intn(g.board.cols)
 			g.Play(NewMove(player, row, col))
 		}
 	}
@@ -289,11 +289,11 @@ func TestBoardManipulation(t *testing.T) {
 	// Exist
 	v := vertex{4, 6}
 	if b.exists(v) {
-		t.Fatalf("vertex (%d, %d) existed on %dx%d board", v[0], v[1], b.height, b.width)
+		t.Fatalf("vertex (%d, %d) existed on %dx%d board", v[0], v[1], b.rows, b.cols)
 	}
 	v = vertex{4, 5}
 	if !b.exists(v) {
-		t.Fatalf("vertex (%d, %d) did not exist on %dx%d board", v[0], v[1], b.height, b.width)
+		t.Fatalf("vertex (%d, %d) did not exist on %dx%d board", v[0], v[1], b.rows, b.cols)
 	}
 
 	// Place and look

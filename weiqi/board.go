@@ -21,22 +21,22 @@ func init() {
 
 // board holds the current Go board
 type board struct {
-	height, width int
-	flatArray     []int8
-	hash          int
-	hashTable     []int // Zobrist hashing
+	rows, cols int
+	flatArray  []int8
+	hash       int
+	hashTable  []int // Zobrist hashing
 }
 
-func newBoard(height, width int) board {
-	b := board{height: height, width: width}
-	b.flatArray = make([]int8, height*width)
-	if height*width <= preMaxSize*preMaxSize {
+func newBoard(rows, cols int) board {
+	b := board{rows: rows, cols: cols}
+	b.flatArray = make([]int8, rows*cols)
+	if rows*cols <= preMaxSize*preMaxSize {
 		b.hashTable = preHashTable
 	} else {
 		// Board size too large, need to rebuild hash table
 		// If many games will be large, recommend increasing preMaxSize
 		rand.Seed(1)
-		b.hashTable = make([]int, height*width*2)
+		b.hashTable = make([]int, rows*cols*2)
 		for i := range b.hashTable {
 			b.hashTable[i] = rand.Int()
 		}
@@ -46,7 +46,7 @@ func newBoard(height, width int) board {
 
 // exists checks if the vertex is on the board
 func (b *board) exists(v vertex) bool {
-	if (v[0] >= 0) && (v[0] < b.height) && (v[1] >= 0) && (v[1] < b.width) {
+	if (v[0] >= 0) && (v[0] < b.rows) && (v[1] >= 0) && (v[1] < b.cols) {
 		return true
 	}
 	return false
@@ -55,13 +55,13 @@ func (b *board) exists(v vertex) bool {
 // look retrieves the color at a vertex
 // not using this except for tests & stringer because it does not get inlined
 func (b *board) look(v vertex) int8 {
-	return b.flatArray[v[0]*b.width+v[1]]
+	return b.flatArray[v[0]*b.cols+v[1]]
 }
 
 // place places a move and updates the board hash
 func (b *board) place(m Move) {
 	if !m.pass {
-		i := m.vertex[0]*b.width + m.vertex[1]
+		i := m.vertex[0]*b.cols + m.vertex[1]
 		b.flatArray[i] = m.Color
 		b.hash = b.hash ^ b.hashTable[i*2+int(b.flatArray[i]+1)/2]
 	}
@@ -70,7 +70,7 @@ func (b *board) place(m Move) {
 // remove removes a group and updates the board hash
 func (b *board) remove(p group) {
 	for _, v := range p.interior {
-		i := v[0]*b.width + v[1]
+		i := v[0]*b.cols + v[1]
 		b.hash = b.hash ^ b.hashTable[i*2+int(b.flatArray[i]+1)/2]
 		b.flatArray[i] = 0
 	}
@@ -85,7 +85,7 @@ func (b *board) clear() {
 }
 
 func (b *board) Equals(b2 board) bool {
-	if (b.height != b2.height) || (b.width != b2.width) {
+	if (b.rows != b2.rows) || (b.cols != b2.cols) {
 		return false
 	}
 	for i := range b.flatArray {
@@ -97,8 +97,8 @@ func (b *board) Equals(b2 board) bool {
 }
 
 func (b *board) Copy() board {
-	b2 := board{height: b.height, width: b.width}
-	b2.flatArray = make([]int8, b2.height*b2.width)
+	b2 := board{rows: b.rows, cols: b.cols}
+	b2.flatArray = make([]int8, b2.rows*b2.cols)
 	copy(b2.flatArray, b.flatArray)
 	b2.hash = b.hash
 	b2.hashTable = b.hashTable
@@ -106,10 +106,10 @@ func (b *board) Copy() board {
 }
 
 func (b *board) CopyFrom(b2 board) {
-	if (b.height*b.width != b2.height) || (b.width != b2.width) {
-		b.flatArray = make([]int8, b2.height*b2.width)
-		b.height = b2.height
-		b.width = b2.width
+	if (b.rows*b.cols != b2.rows) || (b.cols != b2.cols) {
+		b.flatArray = make([]int8, b2.rows*b2.cols)
+		b.rows = b2.rows
+		b.cols = b2.cols
 	}
 	copy(b.flatArray, b2.flatArray)
 	b.hash = b2.hash
@@ -118,16 +118,16 @@ func (b *board) CopyFrom(b2 board) {
 
 func (b board) String() string {
 	var rowCrosses, colCrosses []int // Where to put crosses (update this for other board sizes)
-	if (b.height == 19) && (b.width == 19) {
+	if (b.rows == 19) && (b.cols == 19) {
 		rowCrosses = []int{3, 3, 3, 9, 9, 9, 15, 15, 15}
 		colCrosses = []int{3, 9, 15, 3, 9, 15, 3, 9, 15}
 	}
 
-	stringRows := make([]string, b.height+1)
+	stringRows := make([]string, b.rows+1)
 	stringRows[0] = "  "
-	for i := 0; i < b.height; i++ {
+	for i := 0; i < b.rows; i++ {
 		stringRows[i+1] = string(rune(i+97)) + " "
-		for j := 0; j < b.width; j++ {
+		for j := 0; j < b.cols; j++ {
 			if i == 0 {
 				stringRows[0] += string(rune(j+97)) + " "
 			}
@@ -192,19 +192,19 @@ func (b board) String() string {
 	}
 
 	// Check result
-	height := len(array)
-	if (height < 1) || (height > 26) {
-		return board{}, fmt.Errorf("parsed board has unexpected height: %v", height)
+	rows := len(array)
+	if (rows < 1) || (rows > 26) {
+		return board{}, fmt.Errorf("parsed board has unexpected rows: %v", rows)
 	}
-	width := len(array[0])
+	cols := len(array[0])
 	for i := range array {
-		if len(array[i]) != width {
-			return board{}, fmt.Errorf("parsed board rows not fixed length: %v %v", width, len(array[i]))
+		if len(array[i]) != cols {
+			return board{}, fmt.Errorf("parsed board rows not fixed length: %v %v", cols, len(array[i]))
 		}
 	}
 
 	// Construct board
-	board := newBoard(height, width)
+	board := newBoard(rows, cols)
 	board.array = array
 	return board, nil
 

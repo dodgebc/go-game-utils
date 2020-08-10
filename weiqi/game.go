@@ -37,9 +37,12 @@ type Game struct {
 }
 
 // NewGame starts a new game with NZ rules as default
-func NewGame(height, width int) Game {
-	b := newBoard(height, width)
-	b2 := newBoard(height, width)
+func NewGame(rows, cols int) Game {
+	if (rows < 0) || (cols < 0) {
+		panic("tried to set negative game size")
+	}
+	b := newBoard(rows, cols)
+	b2 := newBoard(rows, cols)
 	g := Game{turn: 1, board: b, nextBoard: b2}
 	g.SetRules("NZ")
 	return g
@@ -99,7 +102,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 	}
 
 	// Vertex not empty
-	emptyColor := g.board.flatArray[m.vertex[0]*g.board.width+m.vertex[1]]
+	emptyColor := g.board.flatArray[m.vertex[0]*g.board.cols+m.vertex[1]]
 	if emptyColor != 0 {
 		if playMode != "setup" {
 			return GameError{ErrVertexNotEmpty, m}
@@ -115,8 +118,8 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 	for i := 0; i < 2; i++ { // Loop over adjacent vertices
 		for j := -1; j < 2; j += 2 {
 			adj := vertex{m.vertex[0] + i*j, m.vertex[1] + (1-i)*j}
-			if (adj[0] >= 0) && (adj[0] < g.nextBoard.height) && (adj[1] >= 0) && (adj[1] < g.nextBoard.width) {
-				adjColor := g.nextBoard.flatArray[adj[0]*g.nextBoard.width+adj[1]]
+			if (adj[0] >= 0) && (adj[0] < g.nextBoard.rows) && (adj[1] >= 0) && (adj[1] < g.nextBoard.cols) {
+				adjColor := g.nextBoard.flatArray[adj[0]*g.nextBoard.cols+adj[1]]
 				if adjColor == -m.Color {
 					g.workingGroup.expandAllIfDead(adj, g.nextBoard)
 					if !g.workingGroup.alive {
@@ -145,7 +148,7 @@ func (g *Game) playWithMode(m Move, playMode string) error {
 			if g.nextBoard.hash == g.prevHashes[i] {
 				confirmedRepeat := true
 				if !g.TrustHashes {
-					replayGame := NewGame(g.board.height, g.board.width) // Replay game to check boards
+					replayGame := NewGame(g.board.rows, g.board.cols) // Replay game to check boards
 					for _, m := range g.prevMoves[:i+1] {
 						replayGame.Setup(m)
 					}
@@ -194,4 +197,37 @@ func (g *Game) Setup(m Move) error {
 
 func (g Game) String() string {
 	return g.board.String()
+}
+
+// CheckLegal conveniently checks if a game is legal and returns and error if arguments themselves are bad
+func CheckLegal(rows, cols int, Setup, Moves []string, ruleset string) (bool, error) {
+	if (rows < 0) || (cols < 0) {
+		return false, fmt.Errorf("negative game size: %d %d", rows, cols)
+	}
+	g := NewGame(rows, cols)
+	err := g.SetRules(ruleset)
+	if err != nil {
+		return false, err
+	}
+	for _, ms := range Setup {
+		m, err := NewMoveFromString(ms)
+		if err != nil {
+			return false, err
+		}
+		err = g.Setup(m)
+		if err != nil {
+			return false, nil
+		}
+	}
+	for _, ms := range Moves {
+		m, err := NewMoveFromString(ms)
+		if err != nil {
+			return false, err
+		}
+		err = g.Play(m)
+		if err != nil {
+			return false, nil
+		}
+	}
+	return true, nil
 }
