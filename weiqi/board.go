@@ -106,7 +106,7 @@ func (b *board) Copy() board {
 }
 
 func (b *board) CopyFrom(b2 board) {
-	if (b.rows*b.cols != b2.rows) || (b.cols != b2.cols) {
+	if (b.rows != b2.rows) || (b.cols != b2.cols) {
 		b.flatArray = make([]int8, b2.rows*b2.cols)
 		b.rows = b2.rows
 		b.cols = b2.cols
