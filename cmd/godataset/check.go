@@ -32,9 +32,14 @@ type CheckManager struct {
 }
 
 // NewCheckManager properly initializes a CheckManager
-func NewCheckManager(minLength int, deduplicate, checkLegal bool, verbose bool) *CheckManager {
-	checker := &CheckManager{MinLength: minLength, Deduplicate: deduplicate, CheckLegal: checkLegal, Verbose: verbose}
-	checker.Ruleset = "NZ"
+func NewCheckManager(minLength int, deduplicate, checkLegal bool, ruleset string, verbose bool) *CheckManager {
+	checker := &CheckManager{
+		MinLength:   minLength,
+		Deduplicate: deduplicate,
+		CheckLegal:  checkLegal,
+		Ruleset:     ruleset,
+		Verbose:     verbose,
+	}
 	if deduplicate {
 		checker.hashTable = make(map[uint64]bool)
 		checker.seed = maphash.MakeSeed()
@@ -68,16 +73,6 @@ func (checker *CheckManager) Check(g sgfgrab.GameData) error {
 	return nil
 }
 
-// computeMovesHash computes a hash for the move sequence
-func (checker *CheckManager) computeMovesHash(moves []string) uint64 {
-	var hash maphash.Hash
-	hash.SetSeed(checker.seed)
-	for _, m := range moves {
-		hash.WriteString(m)
-	}
-	return hash.Sum64()
-}
-
 // AddFailed records a failed game parse
 func (checker *CheckManager) AddFailed(n int) {
 	checker.mux.Lock()
@@ -91,4 +86,14 @@ func (checker *CheckManager) ZeroCounts() {
 	checker.NumDuplicate = 0
 	checker.NumIllegal = 0
 	checker.NumShort = 0
+}
+
+// computeMovesHash computes a hash for the move sequence
+func (checker *CheckManager) computeMovesHash(moves []string) uint64 {
+	var hash maphash.Hash
+	hash.SetSeed(checker.seed)
+	for _, m := range moves {
+		hash.WriteString(m)
+	}
+	return hash.Sum64()
 }

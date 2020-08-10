@@ -24,6 +24,7 @@ type GameData struct {
 	Year        int      //
 	Moves       []string // length >= 1, matches ([BW][a-z]{2})?
 	Setup       []string // matches ([BW][a-z]{2})?
+	Source      string   // must be set manually
 
 	alreadyRecorded [11]bool
 }

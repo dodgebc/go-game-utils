@@ -4,17 +4,18 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/dodgebc/go-utils/sgfgrab"
 )
 
 // loader loads files from a single .tar.gz archive
-func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<- []byte, checker *CheckManager) {
+func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<- []byte, checker *CheckManager, sourceName string) {
 
 	// Open .tar.gz input file stream
 	fin, err := os.Open(tgzFile)
@@ -40,8 +41,8 @@ func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<
 
 	// Read from archive and send data for processing
 	tarReader := tar.NewReader(gzipReader)
-	tgzName := strings.Split(tgzFile, "/")[len(strings.Split(tgzFile, "/"))-1]
-	progressUpdate := NewProgressUpdate(tgzName)
+	tgzName := filepath.Base(tgzFile)
+	progressUpdate := NewProgressUpdate(fmt.Sprintf("%s (%q)", tgzName, sourceName))
 	defer progressUpdate.Close()
 
 	for {
@@ -58,7 +59,7 @@ func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<
 			return
 		}
 		hName := header.Name
-		if (header.Typeflag == tar.TypeReg) && (len(hName) >= 4) && (hName[len(hName)-4:] == ".sgf") { // Actual SGF file
+		if (header.Typeflag == tar.TypeReg) && (len(hName) >= 4) && (hName[len(hName)-4:] == ".sgf") { // Is an SGF file
 			sgfBytes, err := ioutil.ReadAll(tarReader) // Read whole file
 			if err != nil {
 				select {
@@ -91,7 +92,7 @@ func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<
 }
 
 // processor parses incoming SGF data to json lines
-func processor(cancel <-chan struct{}, cerr chan<- error, in <-chan []byte, out chan<- []byte, checker *CheckManager) {
+func processor(cancel <-chan struct{}, cerr chan<- error, in <-chan []byte, out chan<- []byte, checker *CheckManager, sourceName string) {
 	for sgfBytes := range in {
 		var jsonGames []byte
 
@@ -106,9 +107,12 @@ func processor(cancel <-chan struct{}, cerr chan<- error, in <-chan []byte, out 
 
 		// Check and convert to JSON
 		for _, g := range games {
-			if err := checker.Check(g); err != nil && checker.Verbose {
-				log.Print(err)
+			if err := checker.Check(g); err != nil {
+				if checker.Verbose {
+					log.Print(err)
+				}
 			} else {
+				g.Source = sourceName
 				j, err := json.Marshal(g)
 				if err != nil {
 					select {
