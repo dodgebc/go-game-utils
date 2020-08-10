@@ -10,41 +10,74 @@ var ErrAlreadyExists = errors.New("property already exists")
 
 // GameData stores important parsed game data
 type GameData struct {
-	Size        [2]int   // rows, cols
+	Size        [2]int   // (rows, cols) >= 1
 	Komi        float64  //
-	Handicap    int      // >= 0
-	Winner      string   // "B", "W", or "" (no result)
+	Handicap    int      // >=0, unlike SGF
+	Winner      string   // "B", "W", or "" (no winner)
 	Score       float64  //
-	Special     string   // "" (scored), "Time", "Resign", "Forfeit", or "None"
+	End         string   // "Scored", "Time", "Resign", "Forfeit", or ""
 	BlackRank   string   // [0-9]{1,2}[kdp]
 	WhiteRank   string   // [0-9]{1,2}[kdp]
 	BlackPlayer string   //
 	WhitePlayer string   //
 	Time        int      // >=0, seconds
-	Overtime    string   //
-	Date        string   // [0-9]{4}-[0-9]{2}-[0-9]{2} or ""
-	Moves       []string // ([BW][a-z]{2})?
-	Setup       []string // ([BW][a-z]{2})?
+	Year        int      //
+	Moves       []string // length >= 1, matches ([BW][a-z]{2})?
+	Setup       []string // matches ([BW][a-z]{2})?
 
 	alreadyRecorded [11]bool
 }
 
 // Finalize checks for any inconsistencies and fills in defaults
 func (g *GameData) Finalize() error {
+
 	// Size default
 	if !g.alreadyRecorded[0] {
 		g.Size = [2]int{19, 19}
 	}
-	// Check number of setup stones
+
+	// No setup stones despite handicap (maybe they are recorded as game moves)
+	if (len(g.Setup) == 0) && (g.Handicap != 0) {
+		if len(g.Moves) >= g.Handicap {
+			g.Setup = g.Moves[:g.Handicap]
+			g.Moves = g.Moves[g.Handicap:]
+		}
+	}
+
+	// No handicap despite setup stones (try setting it to number of setup stones)
+	if (len(g.Setup) != 0) && (g.Handicap == 0) {
+		g.Handicap = len(g.Setup)
+	}
+
+	// Check number of handicap stones
 	if len(g.Setup) != g.Handicap {
 		return fmt.Errorf("handicap %d has %d setup stones", g.Handicap, len(g.Setup))
 	}
-	// Check setup stone color (should be black)
+
+	// Check color of handicap stones (should be all black)
 	for i := range g.Setup {
 		if g.Setup[i][:1] != "B" {
 			return fmt.Errorf("setup stone not black")
 		}
 	}
+
+	// If repeated player at end, assume passes in-between
+	/*if len(g.Moves) >= 2 {
+		lastPlayer := g.Moves[len(g.Moves)-1][:1]
+		for i := len(g.Moves) - 2; g.Moves[i][:1] == lastPlayer; i-- {
+			g.Moves = append(g.Moves, "")
+			copy(g.Moves[i+2:], g.Moves[i+1:])
+			if lastPlayer == "B" {
+				g.Moves[i+1] = "W"
+			} else if lastPlayer == "W" {
+				g.Moves[i+1] = "B"
+			} else {
+				panic("player was not black or white")
+			}
+
+		}
+	}*/
+
 	// Replace "tt" with pass where applicable
 	if g.Size[0]*g.Size[1] <= 19*19 {
 		for i := range g.Setup {
@@ -107,7 +140,7 @@ func (g *GameData) AddProperty(identifier, value string) error {
 		}
 		g.Winner = v1
 		g.Score = v2
-		g.Special = v3
+		g.End = v3
 		g.alreadyRecorded[3] = true
 		return nil
 	case "BR":
@@ -136,22 +169,14 @@ func (g *GameData) AddProperty(identifier, value string) error {
 		if g.alreadyRecorded[6] {
 			return fmt.Errorf("%w: %s %s", ErrAlreadyExists, identifier, value)
 		}
-		v, err := ParsePlayer("B", value)
-		if err != nil {
-			return err
-		}
-		g.BlackPlayer = v
+		g.BlackPlayer = value
 		g.alreadyRecorded[6] = true
 		return nil
 	case "PW":
 		if g.alreadyRecorded[7] {
 			return fmt.Errorf("%w: %s %s", ErrAlreadyExists, identifier, value)
 		}
-		v, err := ParsePlayer("W", value)
-		if err != nil {
-			return err
-		}
-		g.WhitePlayer = v
+		g.WhitePlayer = value
 		g.alreadyRecorded[7] = true
 		return nil
 	case "TM":
@@ -165,17 +190,6 @@ func (g *GameData) AddProperty(identifier, value string) error {
 		g.Time = v
 		g.alreadyRecorded[8] = true
 		return nil
-	case "OT":
-		if g.alreadyRecorded[9] {
-			return fmt.Errorf("%w: %s %s", ErrAlreadyExists, identifier, value)
-		}
-		v, err := ParseOvertime(value)
-		if err != nil {
-			return err
-		}
-		g.Overtime = v
-		g.alreadyRecorded[9] = true
-		return nil
 	case "DT":
 		if g.alreadyRecorded[10] {
 			return fmt.Errorf("%w: %s %s", ErrAlreadyExists, identifier, value)
@@ -184,7 +198,7 @@ func (g *GameData) AddProperty(identifier, value string) error {
 		if err != nil {
 			return err
 		}
-		g.Date = v
+		g.Year = v
 		g.alreadyRecorded[10] = true
 		return nil
 	case "B", "W", "AB", "AW":
@@ -217,7 +231,7 @@ func (g *GameData) Equals(g2 GameData) bool {
 		return false
 	case g.Score != g2.Score:
 		return false
-	case g.Special != g2.Special:
+	case g.End != g2.End:
 		return false
 	case g.BlackRank != g2.BlackRank:
 		return false
@@ -229,9 +243,7 @@ func (g *GameData) Equals(g2 GameData) bool {
 		return false
 	case g.Time != g2.Time:
 		return false
-	case g.Overtime != g2.Overtime:
-		return false
-	case g.Date != g2.Date:
+	case g.Year != g2.Year:
 		return false
 	}
 	if len(g.Moves) != len(g2.Moves) {

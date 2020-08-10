@@ -199,35 +199,35 @@ func (g Game) String() string {
 	return g.board.String()
 }
 
-// CheckLegal conveniently checks if a game is legal and returns and error if arguments themselves are bad
-func CheckLegal(rows, cols int, Setup, Moves []string, ruleset string) (bool, error) {
+// CheckLegal conveniently checks if a game is legal and returns nil error if yes
+func CheckLegal(rows, cols int, Setup, Moves []string, ruleset string) error {
 	if (rows < 0) || (cols < 0) {
-		return false, fmt.Errorf("negative game size: %d %d", rows, cols)
+		return fmt.Errorf("negative game size: %d %d", rows, cols)
 	}
 	g := NewGame(rows, cols)
 	err := g.SetRules(ruleset)
 	if err != nil {
-		return false, err
+		return err
 	}
 	for _, ms := range Setup {
 		m, err := NewMoveFromString(ms)
 		if err != nil {
-			return false, err
+			return err
 		}
 		err = g.Setup(m)
 		if err != nil {
-			return false, nil
+			return err
 		}
 	}
 	for _, ms := range Moves {
 		m, err := NewMoveFromString(ms)
 		if err != nil {
-			return false, err
+			return err
 		}
 		err = g.Play(m)
 		if err != nil {
-			return false, nil
+			return err
 		}
 	}
-	return true, nil
+	return nil
 }

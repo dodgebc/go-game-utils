@@ -22,7 +22,7 @@ func TestAlphaGo(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gs) != 1 {
-		t.Errorf("got %d games, want 1", len(gs))
+		t.Fatalf("got %d games, want 1", len(gs))
 	}
 	if !gs[0].Equals(alphaGoGameData) {
 		t.Errorf("\ngot:\n%#v\n\nwant:\n%#v", gs[0], alphaGoGameData)
@@ -35,7 +35,7 @@ func TestOgs(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gs) != 1 {
-		t.Errorf("got %d games, want 1", len(gs))
+		t.Fatalf("got %d games, want 1", len(gs))
 	}
 	if !gs[0].Equals(ogsGameData) {
 		t.Errorf("\ngot:\n%#v\n\nwant:\n%#v", gs[0], ogsGameData)
@@ -59,23 +59,23 @@ func TestParseError(t *testing.T) {
 	}
 
 	sgfText = "(RE[Z+10.5])"
-	if _, err := Grab(sgfText); err == nil {
-		t.Error("no error on bad result")
+	if g, err := Grab(sgfText); err != nil || len(g) != 1 || g[0].Winner != "" || g[0].Score != 0.0 || g[0].End != "" {
+		t.Error("bad result not ignored")
 	}
 
 	sgfText = "(BR[341p])"
-	if _, err := Grab(sgfText); err == nil {
-		t.Error("no error on bad rank")
+	if g, _ := Grab(sgfText); len(g) != 1 || g[0].BlackRank != "" {
+		t.Error("bad rank not ignored")
 	}
 
 	sgfText = "(TM[20.5])"
-	if _, err := Grab(sgfText); err == nil {
-		t.Error("no error on bad time")
+	if g, _ := Grab(sgfText); len(g) != 1 || g[0].Time != 0 {
+		t.Error("bad time not ignored")
 	}
 
-	sgfText = "(DT[2020])"
-	if _, err := Grab(sgfText); err == nil {
-		t.Error("no error on bad date")
+	sgfText = "(DT[202])"
+	if g, _ := Grab(sgfText); len(g) != 1 || g[0].Year != 0 {
+		t.Error("bad date not ignored")
 	}
 
 	sgfText = "(B[Zc2])"
@@ -99,31 +99,31 @@ func TestHandicapCheck(t *testing.T) {
 }
 
 func TestRootProperties(t *testing.T) {
-	sgfText := "(;SZ[9:10]KM[0.5]HA[1]RE[B+20.5]PB[me]PW[you]BR[4k]WR[9p]TM[200]OT[something]DT[2020-01-01];AB[cc](;B[ab];W[bA];B[tt](;W[])(;W[cc])))"
+	sgfText := "(;SZ[9:10]KM[0.5]HA[2]RE[B+20.5]PB[me]PW[you]BR[4k]WR[9p]TM[200]OT[something]DT[2020-01-01];AB[cc][dd](;B[ab];W[bA];B[tt](;W[])(;W[cc])))"
 	gs, err := Grab(sgfText)
 	if err != nil {
 		t.Error(err)
 	}
 	if len(gs) != 1 {
-		t.Errorf("got %d games, want 1", len(gs))
+		t.Fatalf("got %d games, want 1", len(gs))
 	}
 	g := gs[0]
 	expect := GameData{
 		Size:        [2]int{10, 9},
 		Komi:        0.5,
-		Handicap:    1,
+		Handicap:    2,
 		Winner:      "B",
 		Score:       20.5,
-		Special:     "",
+		End:         "Scored",
 		BlackPlayer: "me",
 		WhitePlayer: "you",
 		BlackRank:   "4k",
 		WhiteRank:   "9p",
 		Time:        200,
-		Overtime:    "something",
-		Date:        "2020-01-01",
-		Moves:       []string{"Bab", "WbA", "B", "W"},
-		Setup:       []string{"Bcc"},
+		//Overtime: "something",
+		Year:  2020,
+		Moves: []string{"Bab", "WbA", "B", "W"},
+		Setup: []string{"Bcc", "Bdd"},
 	}
 	if !g.Equals(expect) {
 		t.Errorf("\ngot:\n%#v\n\nwant:\n%#v", g, expect)
@@ -137,7 +137,7 @@ func TestMultipleGames(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gs) != 2 {
-		t.Errorf("got %d games, want 2", len(gs))
+		t.Fatalf("got %d games, want 2", len(gs))
 	}
 	expect := GameData{Size: [2]int{2, 3}}
 	if !gs[0].Equals(expect) {
@@ -156,7 +156,7 @@ func TestTree(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gs) != 1 {
-		t.Errorf("got %d games, want 1", len(gs))
+		t.Fatalf("got %d games, want 1", len(gs))
 	}
 	g := gs[0]
 	expect := GameData{
@@ -175,7 +175,7 @@ func TestNoGame(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gs) != 0 {
-		t.Errorf("got %d games, want 1", len(gs))
+		t.Fatalf("got %d games, want 1", len(gs))
 	}
 }
 
@@ -186,7 +186,7 @@ func TestTrivial(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gs) != 1 {
-		t.Errorf("got %d games, want 1", len(gs))
+		t.Fatalf("got %d games, want 1", len(gs))
 	}
 	g := gs[0]
 	expect := GameData{Size: [2]int{19, 19}}
@@ -837,15 +837,15 @@ var ogsGameData GameData = GameData{
 	Handicap:    0,
 	Winner:      "B",
 	Score:       2.5,
-	Special:     "",
+	End:         "Scored",
 	BlackRank:   "23k",
 	WhiteRank:   "19k",
 	BlackPlayer: "Spectral-7k",
 	WhitePlayer: "Spectral-10k",
 	Time:        600,
-	Overtime:    "5x30 byo-yomi",
-	Date:        "2019-06-17",
-	Moves:       []string{"Bpd", "Wdd", "Bdp", "Wpp", "Bqn", "Wnq", "Bpj", "Wnc", "Blc", "Wqc", "Bqd", "Wpc", "Bod", "Wnb", "Bme", "Wcn", "Bfq", "Wdj", "Bfc", "Wcf", "Bdb", "Wcc", "Bhd", "Wql", "Bpl", "Wqk", "Bpk", "Wqj", "Bqi", "Wri", "Bqh", "Wrh", "Bqg", "Wqm", "Bpm", "Wpn", "Bpo", "Won", "Bqp", "Woo", "Bqo", "Wpq", "Bqq", "Wrn", "Bro", "Wrm", "Bpr", "Wor", "Bqr", "Whq", "Bbp", "Who", "Bcl", "Wen", "Bel", "Wfj", "Bgl", "Whj", "Bil", "Wjj", "Bkl", "Wlj", "Bml", "Wlm", "Bll", "Wjm", "Bjl", "Whm", "Bhl", "Wfm", "Bfl", "Wkm", "Bmm", "Wmn", "Bim", "Win", "Bgm", "Wgn", "Bhn", "Wio", "Bgo", "Whm", "Bfo", "Wfn", "Bhn", "Weo", "Bep", "Whm", "Bln", "Wlo", "Bhn", "Wgp", "Bfp", "Whm", "Bjn", "Wkn", "Bhn", "Wco", "Bhm", "Wcp", "Bcq", "Wbo", "Bbq", "Wbl", "Bbk", "Wck", "Bdk", "Wcj", "Bbm", "Wbj", "Bal", "Wek", "Bdl", "Woi", "Bpi", "Wnk", "Bnl", "Wjc", "Bkd", "Wlb", "Bkb", "Wkc", "Bmb", "Wld", "Bla", "Wmc", "Blb", "Wjb", "Bmd", "Wle", "Bjd", "Wlf", "Bic", "Wib", "Bhb", "Wja", "Bha", "Wna", "Bia", "Wmf", "Bof", "Wnf", "Boe", "Wie", "Bhe", "Wif", "Bhf", "Wig", "Bhg", "Whh", "Bgh", "Wgi", "Bfh", "Wff", "Bef", "Wee", "Beg", "Wfd", "Bec", "Wcb", "Bcg", "Wbg", "Bch", "Wbh", "Bdf", "Wde", "Bei", "Wej", "Bci", "Wbi", "Bdi", "Wgr", "Bfr", "Wgq", "Bgs", "Whs", "Bfs", "Wir", "Brg", "Wrk", "Brc", "Wrb", "Brd", "Wsb", "Boc", "Wob", "Boh", "Wnh", "Bni", "Wmi", "Boj", "Wnj", "Bng", "Wmh", "Bca", "Wba", "Bda", "Wbb", "Bdc", "Wgd", "Bgc", "Wid", "Bka", "Wje", "Bke", "Wkf", "Bih", "Whi", "Bjh", "Wkg", "Bkh", "Wjg", "Bmg", "Wlg", "Bog", "Wlh", "Bmk", "Wmj", "Bsh", "Wsi", "Bsg", "Wso", "Bsp", "Wsn", "Brq", "Wps", "Bqs", "Wos", "Bnn", "Wno", "Bnm", "Waj", "Bak", "Wsc", "Bsd", "Wfg", "Bgg", "Wfi", "Beh", "Wgk", "Bik", "Wij", "Bkk", "Wkj", "Bom", "Wok", "Boi", "Wce", "Bgf", "Wfe", "Bnd", "Wpb", "B", "W"},
+	//Overtime:    "5x30 byo-yomi",
+	Year:  2019,
+	Moves: []string{"Bpd", "Wdd", "Bdp", "Wpp", "Bqn", "Wnq", "Bpj", "Wnc", "Blc", "Wqc", "Bqd", "Wpc", "Bod", "Wnb", "Bme", "Wcn", "Bfq", "Wdj", "Bfc", "Wcf", "Bdb", "Wcc", "Bhd", "Wql", "Bpl", "Wqk", "Bpk", "Wqj", "Bqi", "Wri", "Bqh", "Wrh", "Bqg", "Wqm", "Bpm", "Wpn", "Bpo", "Won", "Bqp", "Woo", "Bqo", "Wpq", "Bqq", "Wrn", "Bro", "Wrm", "Bpr", "Wor", "Bqr", "Whq", "Bbp", "Who", "Bcl", "Wen", "Bel", "Wfj", "Bgl", "Whj", "Bil", "Wjj", "Bkl", "Wlj", "Bml", "Wlm", "Bll", "Wjm", "Bjl", "Whm", "Bhl", "Wfm", "Bfl", "Wkm", "Bmm", "Wmn", "Bim", "Win", "Bgm", "Wgn", "Bhn", "Wio", "Bgo", "Whm", "Bfo", "Wfn", "Bhn", "Weo", "Bep", "Whm", "Bln", "Wlo", "Bhn", "Wgp", "Bfp", "Whm", "Bjn", "Wkn", "Bhn", "Wco", "Bhm", "Wcp", "Bcq", "Wbo", "Bbq", "Wbl", "Bbk", "Wck", "Bdk", "Wcj", "Bbm", "Wbj", "Bal", "Wek", "Bdl", "Woi", "Bpi", "Wnk", "Bnl", "Wjc", "Bkd", "Wlb", "Bkb", "Wkc", "Bmb", "Wld", "Bla", "Wmc", "Blb", "Wjb", "Bmd", "Wle", "Bjd", "Wlf", "Bic", "Wib", "Bhb", "Wja", "Bha", "Wna", "Bia", "Wmf", "Bof", "Wnf", "Boe", "Wie", "Bhe", "Wif", "Bhf", "Wig", "Bhg", "Whh", "Bgh", "Wgi", "Bfh", "Wff", "Bef", "Wee", "Beg", "Wfd", "Bec", "Wcb", "Bcg", "Wbg", "Bch", "Wbh", "Bdf", "Wde", "Bei", "Wej", "Bci", "Wbi", "Bdi", "Wgr", "Bfr", "Wgq", "Bgs", "Whs", "Bfs", "Wir", "Brg", "Wrk", "Brc", "Wrb", "Brd", "Wsb", "Boc", "Wob", "Boh", "Wnh", "Bni", "Wmi", "Boj", "Wnj", "Bng", "Wmh", "Bca", "Wba", "Bda", "Wbb", "Bdc", "Wgd", "Bgc", "Wid", "Bka", "Wje", "Bke", "Wkf", "Bih", "Whi", "Bjh", "Wkg", "Bkh", "Wjg", "Bmg", "Wlg", "Bog", "Wlh", "Bmk", "Wmj", "Bsh", "Wsi", "Bsg", "Wso", "Bsp", "Wsn", "Brq", "Wps", "Bqs", "Wos", "Bnn", "Wno", "Bnm", "Waj", "Bak", "Wsc", "Bsd", "Wfg", "Bgg", "Wfi", "Beh", "Wgk", "Bik", "Wij", "Bkk", "Wkj", "Bom", "Wok", "Boi", "Wce", "Bgf", "Wfe", "Bnd", "Wpb", "B", "W"},
 }
 var alphaGoGameData GameData = GameData{
 	Size:        [2]int{19, 19},
@@ -853,13 +853,13 @@ var alphaGoGameData GameData = GameData{
 	Handicap:    0,
 	Winner:      "W",
 	Score:       0,
-	Special:     "Resign",
+	End:         "Resign",
 	BlackRank:   "",
 	WhiteRank:   "9p",
 	BlackPlayer: "AlphaGo",
 	WhitePlayer: "Lee Sedol",
 	Time:        7200,
-	Overtime:    "3x60 byo-yomi",
-	Date:        "2016-03-13",
-	Moves:       []string{"Bpd", "Wdp", "Bcd", "Wqp", "Bop", "Woq", "Bnq", "Wpq", "Bcn", "Wfq", "Bmp", "Wpo", "Biq", "Wec", "Bhd", "Wcg", "Bed", "Wcj", "Bdc", "Wbp", "Bnc", "Wqi", "Bep", "Weo", "Bdk", "Wfp", "Bck", "Wdj", "Bej", "Wei", "Bfi", "Weh", "Bfh", "Wbj", "Bfk", "Wfg", "Bgg", "Wff", "Bgf", "Wmc", "Bmd", "Wlc", "Bnb", "Wid", "Bhc", "Wjg", "Bpj", "Wpi", "Boj", "Woi", "Bni", "Wnh", "Bmh", "Wng", "Bmg", "Wmi", "Bnj", "Wmf", "Bli", "Wne", "Bnd", "Wmj", "Blf", "Wmk", "Bme", "Wnf", "Blh", "Wqj", "Bkk", "Wik", "Bji", "Wgh", "Bhj", "Wge", "Bhe", "Wfd", "Bfc", "Wki", "Bjj", "Wlj", "Bkh", "Wjh", "Bml", "Wnk", "Bol", "Wok", "Bpk", "Wpl", "Bqk", "Wnl", "Bkj", "Wii", "Brk", "Wom", "Bpg", "Wql", "Bcp", "Wco", "Boe", "Wrl", "Bsk", "Wrj", "Bhg", "Wij", "Bkm", "Wgi", "Bfj", "Wjl", "Bkl", "Wgl", "Bfl", "Wgm", "Bch", "Wee", "Beb", "Wbg", "Bdg", "Weg", "Ben", "Wfo", "Bdf", "Wdh", "Bim", "Whk", "Bbn", "Wif", "Bgd", "Wfe", "Bhf", "Wih", "Bbh", "Wci", "Bho", "Wgo", "Bor", "Wrg", "Bdn", "Wcq", "Bpr", "Wqr", "Brf", "Wqg", "Bqf", "Wjc", "Bgr", "Wsf", "Bse", "Wsg", "Brd", "Wbl", "Bbk", "Wak", "Bcl", "Whn", "Bin", "Whp", "Bfr", "Wer", "Bes", "Wds", "Bah", "Wai", "Bkd", "Wie", "Bkc", "Wkb", "Bgk", "Wib", "Bqh", "Wrh", "Bqs", "Wrs", "Boh", "Wsl", "Bof", "Wsj", "Bni", "Wnj", "Boo", "Wjp"},
+	//Overtime:    "3x60 byo-yomi",
+	Year:  2016,
+	Moves: []string{"Bpd", "Wdp", "Bcd", "Wqp", "Bop", "Woq", "Bnq", "Wpq", "Bcn", "Wfq", "Bmp", "Wpo", "Biq", "Wec", "Bhd", "Wcg", "Bed", "Wcj", "Bdc", "Wbp", "Bnc", "Wqi", "Bep", "Weo", "Bdk", "Wfp", "Bck", "Wdj", "Bej", "Wei", "Bfi", "Weh", "Bfh", "Wbj", "Bfk", "Wfg", "Bgg", "Wff", "Bgf", "Wmc", "Bmd", "Wlc", "Bnb", "Wid", "Bhc", "Wjg", "Bpj", "Wpi", "Boj", "Woi", "Bni", "Wnh", "Bmh", "Wng", "Bmg", "Wmi", "Bnj", "Wmf", "Bli", "Wne", "Bnd", "Wmj", "Blf", "Wmk", "Bme", "Wnf", "Blh", "Wqj", "Bkk", "Wik", "Bji", "Wgh", "Bhj", "Wge", "Bhe", "Wfd", "Bfc", "Wki", "Bjj", "Wlj", "Bkh", "Wjh", "Bml", "Wnk", "Bol", "Wok", "Bpk", "Wpl", "Bqk", "Wnl", "Bkj", "Wii", "Brk", "Wom", "Bpg", "Wql", "Bcp", "Wco", "Boe", "Wrl", "Bsk", "Wrj", "Bhg", "Wij", "Bkm", "Wgi", "Bfj", "Wjl", "Bkl", "Wgl", "Bfl", "Wgm", "Bch", "Wee", "Beb", "Wbg", "Bdg", "Weg", "Ben", "Wfo", "Bdf", "Wdh", "Bim", "Whk", "Bbn", "Wif", "Bgd", "Wfe", "Bhf", "Wih", "Bbh", "Wci", "Bho", "Wgo", "Bor", "Wrg", "Bdn", "Wcq", "Bpr", "Wqr", "Brf", "Wqg", "Bqf", "Wjc", "Bgr", "Wsf", "Bse", "Wsg", "Brd", "Wbl", "Bbk", "Wak", "Bcl", "Whn", "Bin", "Whp", "Bfr", "Wer", "Bes", "Wds", "Bah", "Wai", "Bkd", "Wie", "Bkc", "Wkb", "Bgk", "Wib", "Bqh", "Wrh", "Bqs", "Wrs", "Boh", "Wsl", "Bof", "Wsj", "Bni", "Wnj", "Boo", "Wjp"},
 }

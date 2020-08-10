@@ -14,6 +14,7 @@ func Grab(sgfText string) ([]GameData, error) {
 	var parensOpen int
 	var escaped bool
 	var mainBranch bool
+	var identWritten bool
 
 	var identifier strings.Builder
 	var value strings.Builder
@@ -70,18 +71,26 @@ func Grab(sgfText string) ([]GameData, error) {
 		if mainBranch {
 
 			if isValue { // Update value
-				if value.Len() < 30 { // Probably an irrelevant comment, truncate
+				if value.Len() < 30 { // Longer is probably some irrelevant comment
 					value.WriteRune(r)
 				}
 			} else if isIdent && unicode.IsUpper(r) { // Update identifier
+				if identWritten {
+					identifier.Reset()
+					identWritten = false
+				}
 				identifier.WriteRune(r)
 			} else if justDone { // Push property to GameData
 				err := game.AddProperty(identifier.String(), value.String())
 				if err != nil {
-					return []GameData{}, err
+					switch identifier.String() { // Only critical properties end the parse
+					case "SZ", "KM", "HA", "B", "W", "AB", "AW":
+						return []GameData{}, err
+					}
+					//return []GameData{}, err // With this line, all properties can end the parse
 				}
 				value.Reset()
-				identifier.Reset()
+				identWritten = true
 			}
 
 		}
