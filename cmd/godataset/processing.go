@@ -4,18 +4,16 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/dodgebc/go-utils/sgfgrab"
 )
 
 // loader loads files from a single .tar.gz archive
-func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<- []byte, checker *CheckManager, sourceName string) {
+func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<- []byte, checker *CheckManager, progressUpdate *ProgressUpdate) {
 
 	// Open .tar.gz input file stream
 	fin, err := os.Open(tgzFile)
@@ -41,9 +39,6 @@ func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<
 
 	// Read from archive and send data for processing
 	tarReader := tar.NewReader(gzipReader)
-	tgzName := filepath.Base(tgzFile)
-	progressUpdate := NewProgressUpdate(fmt.Sprintf("%s (%q)", tgzName, sourceName))
-	defer progressUpdate.Close()
 
 	for {
 		// Read SGF data
@@ -88,7 +83,6 @@ func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<
 			progressUpdate.SetOther("duplicate", checker.NumDuplicate)
 		}
 	}
-	progressUpdate.Close()
 }
 
 // processor parses incoming SGF data to json lines

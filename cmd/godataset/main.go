@@ -86,10 +86,12 @@ func main() {
 	for _, tgzFile := range tgzFiles {
 
 		// Source name
-		sourceName := filepath.Base(tgzFile)
-		if s, ok := sourceNames[sourceName]; ok {
+		tgzName := filepath.Base(tgzFile)
+		sourceName := tgzName
+		if s, ok := sourceNames[tgzName]; ok {
 			sourceName = s
 		}
+		progressUpdate := NewProgressUpdate(fmt.Sprintf("%s (%q)", tgzName, sourceName))
 
 		// Create channels
 		cancel := make(chan struct{})
@@ -101,7 +103,7 @@ func main() {
 
 		// Single loader and saver
 		go func() {
-			loader(cancel, cerrLoader, tgzFile, in, checker, sourceName)
+			loader(cancel, cerrLoader, tgzFile, in, checker, progressUpdate)
 			close(in)
 		}()
 		go func() {
@@ -138,6 +140,7 @@ func main() {
 			}
 		}
 
+		progressUpdate.Close()
 		checker.ZeroCounts()
 	}
 

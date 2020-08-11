@@ -17,8 +17,8 @@ type ProgressUpdate struct {
 }
 
 // NewProgressUpdate starts a progress update
-func NewProgressUpdate(description string) ProgressUpdate {
-	pu := ProgressUpdate{
+func NewProgressUpdate(description string) *ProgressUpdate {
+	pu := &ProgressUpdate{
 		startTime:   time.Now(),
 		lastUpdate:  time.Now(),
 		description: description,
@@ -68,5 +68,5 @@ func (pu *ProgressUpdate) Close() {
 	for i := range pu.otherKeys {
 		fmt.Printf("    %s: %d", pu.otherKeys[i], pu.otherValues[i])
 	}
-	fmt.Printf("        \n")
+	fmt.Print("        \r\n")
 }
