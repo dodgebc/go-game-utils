@@ -56,7 +56,9 @@ func (checker *CheckManager) Check(g sgfgrab.GameData) error {
 		return errors.New("too short")
 	}
 	if checker.Deduplicate {
-		sum := checker.computeMovesHash(g.Moves)
+		checker.mux.Unlock()
+		sum := checker.computeHash(g)
+		checker.mux.Lock()
 		if checker.hashTable[sum] {
 			checker.NumDuplicate++
 			return errors.New("duplicate")
@@ -91,12 +93,13 @@ func (checker *CheckManager) ZeroCounts() {
 	checker.NumShort = 0
 }
 
-// computeMovesHash computes a hash for the move sequence
-func (checker *CheckManager) computeMovesHash(moves []string) uint64 {
+// computeHash computes a hash for the move sequence
+func (checker *CheckManager) computeHash(g sgfgrab.GameData) uint64 {
 	var hash maphash.Hash
 	hash.SetSeed(checker.seed)
-	for _, m := range moves {
+	for _, m := range g.Moves {
 		hash.WriteString(m)
 	}
+	hash.WriteString(g.Winner)
 	return hash.Sum64()
 }

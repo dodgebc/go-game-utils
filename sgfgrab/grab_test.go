@@ -53,6 +53,11 @@ func TestParseError(t *testing.T) {
 		t.Error("no error on bad komi")
 	}
 
+	sgfText = "(KM[nan])"
+	if _, err := Grab(sgfText); err == nil {
+		t.Error("no error on nan komi")
+	}
+
 	sgfText = "(HA[-4])"
 	if _, err := Grab(sgfText); err == nil {
 		t.Error("no error on bad handicap")

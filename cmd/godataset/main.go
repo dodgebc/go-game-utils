@@ -1,3 +1,4 @@
+// godataset builds a .jsonl.gz dataset of games from a .tar.gz archive of SGF files
 package main
 
 import (
@@ -17,7 +18,7 @@ func main() {
 
 	// Output file and source names
 	var outFile, sourceFile string
-	flag.StringVar(&outFile, "out", "dataset.jsonl.gz", "output path")
+	flag.StringVar(&outFile, "out", "", "output path")
 	flag.StringVar(&sourceFile, "sources", "", "csv file with archive names and corresponding source names, otherwise uses archive name")
 
 	// Configuration for checking
@@ -65,6 +66,9 @@ func main() {
 	}
 
 	// Open .jsonl output file stream
+	if outFile == "" {
+		log.Fatal("no output path provided")
+	}
 	fout, err := os.Create(outFile)
 	if err != nil {
 		log.Fatal(err)
@@ -98,8 +102,8 @@ func main() {
 		cerrLoader := make(chan error)
 		cerrProcessor := make(chan error)
 		cerrSaver := make(chan error)
-		in := make(chan []byte, 2048)
-		out := make(chan []byte, 2048)
+		in := make(chan []byte, 1<<12)
+		out := make(chan []byte, 1<<12)
 
 		// Single loader and saver
 		go func() {

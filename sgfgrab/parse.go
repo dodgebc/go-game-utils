@@ -2,6 +2,7 @@ package sgfgrab
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,6 +64,9 @@ func ParseKomi(v string) (float64, error) {
 			vFloat = wk / 100
 		}
 	}
+	if math.IsNaN(vFloat) || math.IsInf(vFloat, 0) {
+		return 0.0, ErrParse{"KM", v}
+	}
 	return vFloat, nil
 }
 
@@ -95,7 +99,7 @@ func ParseResult(v string) (string, float64, string, error) {
 
 	// Should be float now
 	vFloat, err := strconv.ParseFloat(findResult[2], 64)
-	if err != nil {
+	if (err != nil) || (math.IsNaN(vFloat)) || (math.IsInf(vFloat, 0)) {
 		return findResult[1], 0.0, "", ErrParse{"RE", v}
 	}
 	return findResult[1], vFloat, "Scored", nil
