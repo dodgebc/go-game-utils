@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/dodgebc/go-utils/sgfgrab"
 )
@@ -54,7 +55,7 @@ func loader(cancel <-chan struct{}, cerr chan<- error, tgzFile string, out chan<
 			return
 		}
 		hName := header.Name
-		if (header.Typeflag == tar.TypeReg) && (len(hName) >= 4) && (hName[len(hName)-4:] == ".sgf") { // Is an SGF file
+		if (header.Typeflag == tar.TypeReg) && (len(hName) >= 4) && (strings.ToLower(hName[len(hName)-4:]) == ".sgf") { // Is an SGF file
 			sgfBytes, err := ioutil.ReadAll(tarReader) // Read whole file
 			if err != nil {
 				select {

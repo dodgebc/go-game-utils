@@ -62,9 +62,12 @@ func (checker *CheckManager) Check(g sgfgrab.GameData) error {
 			return errors.New("duplicate")
 		}
 		checker.hashTable[sum] = true
+
 	}
 	if checker.CheckLegal {
+		checker.mux.Unlock() // This is an expensive step that can be run concurrently
 		err := weiqi.CheckLegal(g.Size[0], g.Size[1], g.Setup, g.Moves, checker.Ruleset)
+		checker.mux.Lock()
 		if err != nil {
 			checker.NumIllegal++
 			return err

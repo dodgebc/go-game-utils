@@ -98,8 +98,8 @@ func main() {
 		cerrLoader := make(chan error)
 		cerrProcessor := make(chan error)
 		cerrSaver := make(chan error)
-		in := make(chan []byte)
-		out := make(chan []byte)
+		in := make(chan []byte, 2048)
+		out := make(chan []byte, 2048)
 
 		// Single loader and saver
 		go func() {
