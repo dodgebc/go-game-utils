@@ -1,3 +1,4 @@
 *.exe
 *.prof
 *.gz
+.ipynb_checkpoints
