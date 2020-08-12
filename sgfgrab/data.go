@@ -13,18 +13,24 @@ type GameData struct {
 	Size        [2]int   // (rows, cols) >= 1
 	Komi        float64  //
 	Handicap    int      // >=0, unlike SGF
-	Winner      string   // "B", "W", or "" (no winner)
-	Score       float64  //
-	End         string   // "Scored", "Time", "Resign", "Forfeit", or ""
-	BlackRank   string   // [0-9]{1,2}[kdp]
-	WhiteRank   string   // [0-9]{1,2}[kdp]
-	BlackPlayer string   //
-	WhitePlayer string   //
-	Time        int      // >=0, seconds
-	Year        int      //
-	Moves       []string // length >= 1, matches ([BW][a-z]{2})?
-	Setup       []string // matches ([BW][a-z]{2})?
-	Source      string   // must be set manually
+	Length      int      // number of actual game moves
+	Winner      string   `json:",omitempty"` // "B", "W", or "" (no winner)
+	Score       float64  `json:",omitempty"` //
+	End         string   `json:",omitempty"` // "Scored", "Time", "Resign", "Forfeit", or ""
+	BlackRank   string   `json:",omitempty"` // [0-9]{1,2}[kdp]
+	WhiteRank   string   `json:",omitempty"` // [0-9]{1,2}[kdp]
+	BlackPlayer string   `json:",omitempty"` //
+	WhitePlayer string   `json:",omitempty"` //
+	Time        int      `json:",omitempty"` // >=0, seconds
+	Year        int      `json:",omitempty"` //
+	Moves       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
+	Setup       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
+
+	// convenience fields that can be manually set
+	Source  string `json:",omitempty"`
+	GameID  uint32 `json:",omitempty"`
+	BlackID uint32 `json:",omitempty"`
+	WhiteID uint32 `json:",omitempty"`
 
 	alreadyRecorded [11]bool
 }
@@ -62,23 +68,6 @@ func (g *GameData) Finalize() error {
 		}
 	}
 
-	// If repeated player at end, assume passes in-between
-	/*if len(g.Moves) >= 2 {
-		lastPlayer := g.Moves[len(g.Moves)-1][:1]
-		for i := len(g.Moves) - 2; g.Moves[i][:1] == lastPlayer; i-- {
-			g.Moves = append(g.Moves, "")
-			copy(g.Moves[i+2:], g.Moves[i+1:])
-			if lastPlayer == "B" {
-				g.Moves[i+1] = "W"
-			} else if lastPlayer == "W" {
-				g.Moves[i+1] = "B"
-			} else {
-				panic("player was not black or white")
-			}
-
-		}
-	}*/
-
 	// Replace "tt" with pass where applicable
 	if g.Size[0]*g.Size[1] <= 19*19 {
 		for i := range g.Setup {
@@ -92,6 +81,10 @@ func (g *GameData) Finalize() error {
 			}
 		}
 	}
+
+	// Record game length
+	g.Length = len(g.Moves)
+
 	return nil
 }
 

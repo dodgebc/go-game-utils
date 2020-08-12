@@ -18,8 +18,8 @@ func main() {
 
 	// Output file and source names
 	var outFile, sourceFile string
-	flag.StringVar(&outFile, "out", "", "output path")
-	flag.StringVar(&sourceFile, "sources", "", "csv file with archive names and corresponding source names, otherwise uses archive name")
+	flag.StringVar(&outFile, "out", "", "output filepath for .jsonl.gz dataset")
+	flag.StringVar(&sourceFile, "sources", "", "csv file with archive names and corresponding source names, otherwise use archive name")
 
 	// Configuration for checking
 	var deduplicate, checkLegal bool
@@ -28,8 +28,8 @@ func main() {
 	var verbose bool
 	flag.BoolVar(&deduplicate, "deduplicate", false, "remove games with duplicate move sequences")
 	flag.BoolVar(&checkLegal, "checklegal", false, "check if games are legal under provided ruleset")
-	flag.StringVar(&ruleset, "ruleset", "NZ", "ruleset to use for legality checking (\"NZ\", \"AGA\", \"TT\", or \"\")")
-	flag.IntVar(&minLength, "minlength", 5, "minimum number of moves per game")
+	flag.StringVar(&ruleset, "ruleset", "NZ", "ruleset to use for legality checking, \"NZ\", \"AGA\", \"TT\", or \"\"")
+	flag.IntVar(&minLength, "minlength", 0, "minimum number of moves per game")
 	flag.BoolVar(&verbose, "verbose", false, "explain all skipped games")
 
 	// Parallelism
@@ -102,8 +102,8 @@ func main() {
 		cerrLoader := make(chan error)
 		cerrProcessor := make(chan error)
 		cerrSaver := make(chan error)
-		in := make(chan []byte, 1<<12)
-		out := make(chan []byte, 1<<12)
+		in := make(chan []byte, 1<<10)
+		out := make(chan []byte, 1<<10)
 
 		// Single loader and saver
 		go func() {
@@ -144,6 +144,17 @@ func main() {
 			}
 		}
 
+		// Final progress update and then zero checker
+		progressUpdate.SetOther("failed", checker.NumFailed)
+		if checker.MinLength > 0 {
+			progressUpdate.SetOther("short", checker.NumShort)
+		}
+		if checker.CheckLegal {
+			progressUpdate.SetOther("illegal", checker.NumIllegal)
+		}
+		if checker.Deduplicate {
+			progressUpdate.SetOther("duplicate", checker.NumDuplicate)
+		}
 		progressUpdate.Close()
 		checker.ZeroCounts()
 	}
