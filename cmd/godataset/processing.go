@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dodgebc/go-utils/sgfgrab"
+	"github.com/dodgebc/go-game-utils/sgfgrab"
 )
 
 // loader loads files from a single .tar.gz archive

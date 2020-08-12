@@ -5,8 +5,8 @@ import (
 	"hash/maphash"
 	"sync"
 
-	"github.com/dodgebc/go-utils/sgfgrab"
-	"github.com/dodgebc/go-utils/weiqi"
+	"github.com/dodgebc/go-game-utils/sgfgrab"
+	"github.com/dodgebc/go-game-utils/weiqi"
 )
 
 // CheckManager handles deduplication and legality checking

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dodgebc/go-utils/sgfgrab"
+	"github.com/dodgebc/go-game-utils/sgfgrab"
 )
 
 func main() {

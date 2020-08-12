@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"os"
 
-	"github.com/dodgebc/go-utils/sgfgrab"
+	"github.com/dodgebc/go-game-utils/sgfgrab"
 )
 
 func readDataset(inFile string, out chan<- sgfgrab.GameData, sample float64) {
