@@ -34,28 +34,6 @@ func applyMetaOnly(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
 	return applyWrapper(in, apply)
 }
 
-// Generate a unique game ID and add it to the game (ONLY ONE SHOULD BE RUNNING)
-/*func applyGameID(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
-
-	// Keep track of used game IDs
-	GameIDUsed := make(map[uint32]bool)
-
-	// Use a unique random number
-	apply := func(g *sgfgrab.GameData) {
-		tryID := rand.Uint32()
-		i := 0
-		for _, ok := GameIDUsed[tryID]; ok; _, ok = GameIDUsed[tryID] {
-			tryID = rand.Uint32()
-			if i++; i > 50 {
-				log.Fatal("random number cycle detected")
-			}
-		}
-		GameIDUsed[tryID] = true
-		g.GameID = tryID
-	}
-	return applyWrapper(in, apply)
-}*/
-
 // Generate a unique ID for each player to replace their names (ONLY ONE SHOULD BE RUNNING)
 func applyPlayerID(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
 

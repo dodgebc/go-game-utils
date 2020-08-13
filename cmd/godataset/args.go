@@ -22,7 +22,7 @@ func (a *arguments) parse() {
 	// Assign variables
 	flag.StringVar(&a.outFile, "out", "", "output filepath for .jsonl.gz dataset")
 	flag.StringVar(&a.sourceFile, "sources", "", "csv file mapping archive names to sources names, otherwise use archive name")
-	flag.IntVar(&a.workers, "parfactor", 1, "parallel processing factor, not very important since gzip is bottleneck")
+	flag.IntVar(&a.workers, "parfactor", 1, "parallel processing factor")
 	flag.BoolVar(&a.verbose, "verbose", false, "explain all skipped games to stderr")
 
 	// Usage and parse

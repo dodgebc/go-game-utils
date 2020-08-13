@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// Prepare to write dataset
-	out := make(chan []byte, 1<<6)
+	out := make(chan []byte, 4096*args.workers)
 	done := saver(out, args.outFile)
 	defer func() { <-done }()
 	defer close(out)
@@ -63,7 +63,7 @@ func main() {
 		mon := progress.NewMonitor(fmt.Sprintf("%s (%q)", tgzName, sourceName))
 
 		// Load and count files
-		in := make(chan []byte)
+		in := make(chan []byte, 4096*args.workers)
 		go func() {
 			defer close(in)
 			temp, cerr := loader(tgzFile, cancel)

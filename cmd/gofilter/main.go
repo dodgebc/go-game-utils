@@ -3,11 +3,7 @@ package main
 
 import (
 	"log"
-	"os"
-	"os/signal"
-	"runtime/pprof"
 	"sync"
-	"syscall"
 
 	"github.com/dodgebc/go-game-utils/sgfgrab"
 	"github.com/dodgebc/handy-go/progress"
@@ -15,24 +11,6 @@ import (
 
 func main() {
 	log.SetFlags(0)
-	f, err := os.Create("cpu.prof")
-	if err != nil {
-		log.Fatal("could not create CPU profile: ", err)
-	}
-	defer f.Close() // error handling omitted for example
-	if err := pprof.StartCPUProfile(f); err != nil {
-		log.Fatal("could not start CPU profile: ", err)
-	}
-	defer pprof.StopCPUProfile()
-
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		pprof.StopCPUProfile()
-		f.Close()
-		os.Exit(2)
-	}()
 
 	// Filtering configuration
 	var args arguments
@@ -79,21 +57,18 @@ func main() {
 	}
 
 	// Load and count games
-	games := make(chan sgfgrab.GameData)
+	games := make(chan sgfgrab.GameData, 4096*args.workers)
 	go func() {
 		defer close(games)
 		temp := unmarshalGame(readGzipLines(args.inFile, args.sample), args.workers)
 		for g := range temp {
 			games <- g
 			mon.Increment(1)
-			if mon.Iteration() == 100000 {
-				break
-			}
 		}
 	}()
 
 	// Collect filtered games and errors
-	filtered := make(chan sgfgrab.GameData)
+	filtered := make(chan sgfgrab.GameData, 4096*args.workers)
 	var wg sync.WaitGroup
 	wg.Add(args.workers) // This is for the game collectors
 	go func() {
@@ -146,13 +121,10 @@ func main() {
 	}
 
 	// Applying pipeline (single goroutine for generating unique ID)
-	out := make(chan sgfgrab.GameData)
+	out := make(chan sgfgrab.GameData, 4096*args.workers)
 	go func() {
 		defer close(out)
 		needle := (<-chan sgfgrab.GameData)(filtered)
-		/*if args.gameID {
-			needle = applyGameID(needle)
-		}*/
 		if args.playerID {
 			needle = applyPlayerID(needle)
 		}
