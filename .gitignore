@@ -2,3 +2,4 @@
 *.prof
 *.gz
 .ipynb_checkpoints
+*.log

@@ -27,7 +27,7 @@ type arguments struct {
 	// Apply modifications
 	metaOnly bool
 	playerID bool
-	gameID   bool
+	//gameID   bool
 
 	// Execution
 	verbose bool
@@ -49,8 +49,8 @@ func (a *arguments) parse() {
 	flag.StringVar(&a.ruleset, "ruleset", "", "ruleset to use for legality checking: \"NZ\", \"AGA\", \"TT\", or \"\"")
 
 	flag.BoolVar(&a.metaOnly, "metaonly", false, "strip move data to reduce size")
-	flag.BoolVar(&a.playerID, "playerid", false, "replace player name with unique player id")
-	flag.BoolVar(&a.gameID, "gameid", false, "add a unique game id to each game")
+	flag.BoolVar(&a.playerID, "anon", false, "replace player name with unique player id")
+	//flag.BoolVar(&a.gameID, "gameid", false, "add a unique game id to each game")
 
 	flag.BoolVar(&a.verbose, "verbose", false, "explain all skipped games to stderr")
 	flag.IntVar(&a.workers, "parfactor", 1, "parallel processing factor, value of 1 still allows significant parallelism")

@@ -4,8 +4,10 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
 	"runtime/pprof"
 	"sync"
+	"syscall"
 
 	"github.com/dodgebc/go-game-utils/sgfgrab"
 	"github.com/dodgebc/handy-go/progress"
@@ -22,6 +24,15 @@ func main() {
 		log.Fatal("could not start CPU profile: ", err)
 	}
 	defer pprof.StopCPUProfile()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		pprof.StopCPUProfile()
+		f.Close()
+		os.Exit(2)
+	}()
 
 	// Filtering configuration
 	var args arguments
@@ -75,20 +86,23 @@ func main() {
 		for g := range temp {
 			games <- g
 			mon.Increment(1)
+			if mon.Iteration() == 100000 {
+				break
+			}
 		}
 	}()
 
-	// Collect games and errors
-	out := make(chan sgfgrab.GameData)
+	// Collect filtered games and errors
+	filtered := make(chan sgfgrab.GameData)
 	var wg sync.WaitGroup
 	wg.Add(args.workers) // This is for the game collectors
 	go func() {
 		wg.Wait()
-		close(out)
+		close(filtered)
 	}()
 	gameCollect := func(in <-chan sgfgrab.GameData) {
 		for g := range in {
-			out <- g
+			filtered <- g
 			mon.IncrementCounter("accepted", 1)
 		}
 		wg.Done()
@@ -128,17 +142,27 @@ func main() {
 			needle, errChan = filterIllegal(needle, args.ruleset)
 			go errCollect(errChan, "illegal")
 		}
-		if args.gameID {
+		go gameCollect(needle)
+	}
+
+	// Applying pipeline (single goroutine for generating unique ID)
+	out := make(chan sgfgrab.GameData)
+	go func() {
+		defer close(out)
+		needle := (<-chan sgfgrab.GameData)(filtered)
+		/*if args.gameID {
 			needle = applyGameID(needle)
-		}
+		}*/
 		if args.playerID {
 			needle = applyPlayerID(needle)
 		}
 		if args.metaOnly {
 			needle = applyMetaOnly(needle)
 		}
-		go gameCollect(needle)
-	}
+		for g := range needle {
+			out <- g
+		}
+	}()
 
 	// Write games
 	done := writeGzipLines(marshalGame(out, args.workers), args.outFile)

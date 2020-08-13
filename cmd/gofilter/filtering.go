@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash/maphash"
 	"log"
-	"math/rand"
 	"os"
 	"regexp"
 	"sort"
@@ -14,22 +13,6 @@ import (
 	"github.com/dodgebc/go-game-utils/sgfgrab"
 	"github.com/dodgebc/go-game-utils/weiqi"
 )
-
-// applyFunc modifies a game
-type applyFunc func(g *sgfgrab.GameData)
-
-// applyWrapper creates a channel with modifications using the given applyFunc
-func applyWrapper(in <-chan sgfgrab.GameData, apply applyFunc) <-chan sgfgrab.GameData {
-	out := make(chan sgfgrab.GameData)
-	go func() {
-		defer close(out)
-		for g := range in {
-			apply(&g)
-			out <- g
-		}
-	}()
-	return out
-}
 
 // filterFunc checks a game and return nil error if it should be accepted
 type filterFunc func(g sgfgrab.GameData) error
@@ -43,82 +26,13 @@ func filterWrapper(in <-chan sgfgrab.GameData, filter filterFunc) (<-chan sgfgra
 		defer close(cerr)
 		for g := range in {
 			if err := filter(g); err != nil {
-				cerr <- err
+				cerr <- fmt.Errorf("game %d: %s", g.GameID, err)
 			} else {
 				out <- g
 			}
 		}
 	}()
 	return out, cerr
-}
-
-// Strip moves and setup from game
-func applyMetaOnly(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
-	apply := func(g *sgfgrab.GameData) {
-		g.Moves = g.Moves[:0]
-		g.Setup = g.Setup[:0]
-	}
-	return applyWrapper(in, apply)
-}
-
-// Generate a unique game ID and add it to the game
-func applyGameID(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
-
-	// Keep track of used game IDs
-	GameIDUsed := make(map[uint32]bool)
-
-	// Use a unique random number
-	apply := func(g *sgfgrab.GameData) {
-		tryID := rand.Uint32()
-		for _, ok := GameIDUsed[tryID]; ok; {
-			tryID = rand.Uint32()
-		}
-		GameIDUsed[tryID] = true
-		g.GameID = tryID
-	}
-	return applyWrapper(in, apply)
-}
-
-// Generate a unique ID for each player to replace their names
-func applyPlayerID(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
-
-	// Initialize "two way" lookup table
-	SourcePlayerIDTable := make(map[string]map[string]uint32)
-	PlayerIDUsed := make(map[uint32]bool)
-
-	// If player has not been seen before, use a unique random number
-	apply := func(g *sgfgrab.GameData) {
-		if _, ok := SourcePlayerIDTable[g.Source]; !ok {
-			SourcePlayerIDTable[g.Source] = make(map[string]uint32)
-		}
-		for i := 0; i < 2; i++ {
-			var name string
-			if i == 0 {
-				name = g.BlackPlayer
-			} else {
-				name = g.WhitePlayer
-			}
-			var tryID uint32
-			if name != "" { // Empty names get a zero player ID
-				if ID, ok := SourcePlayerIDTable[g.Source][name]; ok {
-					tryID = ID
-				} else {
-					tryID = rand.Uint32()
-					for _, ok := PlayerIDUsed[tryID]; ok; {
-						tryID = rand.Uint32()
-					}
-					SourcePlayerIDTable[g.Source][name] = tryID
-					PlayerIDUsed[tryID] = true
-				}
-			}
-			if i == 0 {
-				g.BlackID = tryID
-			} else {
-				g.WhiteID = tryID
-			}
-		}
-	}
-	return applyWrapper(in, apply)
 }
 
 // Filter games which are too short

@@ -87,7 +87,7 @@ func loader(tgzFile string, cancel <-chan struct{}) (<-chan []byte, <-chan error
 }
 
 // parser converts incoming SGF data into json lines
-func parser(in <-chan []byte, sourceName string, workers int, cancel <-chan struct{}) (<-chan []byte, <-chan error) {
+func parser(in <-chan []byte, sourceName string, gameIDSource <-chan uint32, workers int, cancel <-chan struct{}) (<-chan []byte, <-chan error) {
 	out := make(chan []byte)
 	cerr := make(chan error)
 
@@ -118,6 +118,11 @@ func parser(in <-chan []byte, sourceName string, workers int, cancel <-chan stru
 					// Convert to JSON
 					for _, g := range games {
 						g.Source = sourceName
+						select {
+						case g.GameID = <-gameIDSource:
+						case <-cancel:
+							return
+						}
 						j, err := json.Marshal(g)
 						if err != nil {
 							log.Fatalf("json marshal error: %s", err)

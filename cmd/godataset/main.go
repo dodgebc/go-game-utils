@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,6 +47,9 @@ func main() {
 	defer func() { <-done }()
 	defer close(out)
 
+	// Prepare game ID source
+	gameIDSource := generateGameID(done)
+
 	// Loop over all archives
 	for _, tgzFile := range args.tgzFiles {
 		cancel := make(chan struct{})
@@ -76,7 +80,7 @@ func main() {
 		}()
 
 		// Parse SGF data and log errors if requested
-		thisOut, cerr := parser(in, sourceName, args.workers, cancel)
+		thisOut, cerr := parser(in, sourceName, gameIDSource, args.workers, cancel)
 		go func() {
 			for err := range cerr {
 				if args.verbose {
@@ -91,6 +95,35 @@ func main() {
 			out <- b
 		}
 		mon.Close()
-		break
 	}
+}
+
+// Source from which to generate unique game IDs throughout program execution
+func generateGameID(done <-chan struct{}) <-chan uint32 {
+	out := make(chan uint32)
+	go func() {
+		defer close(out)
+
+		// Keep track of used game IDs
+		GameIDUsed := make(map[uint32]bool)
+
+		// Use a unique random number
+		for {
+			tryID := rand.Uint32()
+			i := 0
+			for _, ok := GameIDUsed[tryID]; ok; _, ok = GameIDUsed[tryID] {
+				tryID = rand.Uint32()
+				if i++; i > 50 {
+					log.Fatal("random number cycle detected")
+				}
+			}
+			GameIDUsed[tryID] = true
+			select {
+			case out <- tryID:
+			case <-done:
+				return
+			}
+		}
+	}()
+	return out
 }
