@@ -18,6 +18,8 @@ type arguments struct {
 
 	// Filters
 	minLength     int
+	size          int
+	hasWinner     bool
 	blacklistFile string
 	topCut        float64
 	deduplicate   bool
@@ -41,6 +43,8 @@ func (a *arguments) parse() {
 	flag.Float64Var(&a.sample, "sample", 1.0, "fraction of games to sample")
 
 	flag.IntVar(&a.minLength, "minlength", 0, "minimum number of moves per game")
+	flag.IntVar(&a.size, "size", 0, "restrict board size (square)")
+	flag.BoolVar(&a.hasWinner, "haswinner", false, "discard games with no winner")
 	flag.StringVar(&a.blacklistFile, "blacklist", "", "filepath with case-insensitive regular expressions to exclude players")
 	flag.Float64Var(&a.topCut, "topcut", 0.0, "fraction of most frequent players to remove per source (requires an additional scan)")
 	flag.BoolVar(&a.deduplicate, "deduplicate", false, "remove games with duplicate move sequences")

@@ -67,17 +67,17 @@ func main() {
 		}
 	}()
 
-	// Collect filtered games and errors
-	filtered := make(chan sgfgrab.GameData, 4096*args.workers)
+	// Collect and count games and errors
+	out := make(chan sgfgrab.GameData, 4096*args.workers)
 	var wg sync.WaitGroup
-	wg.Add(args.workers) // This is for the game collectors
+	wg.Add(1) // For the game collector
 	go func() {
 		wg.Wait()
-		close(filtered)
+		close(out)
 	}()
 	gameCollect := func(in <-chan sgfgrab.GameData) {
 		for g := range in {
-			filtered <- g
+			out <- g
 			mon.IncrementCounter("accepted", 1)
 		}
 		wg.Done()
@@ -93,48 +93,36 @@ func main() {
 		wg.Done()
 	}
 
-	// Filtering pipeline
-	for i := 0; i < args.workers; i++ {
-		needle := (<-chan sgfgrab.GameData)(games)
-		var errChan <-chan error
-		if args.minLength > 0 {
-			needle, errChan = filterMinLength(needle, args.minLength)
-			go errCollect(errChan, "short")
-		}
-		if args.blacklistFile != "" {
-			needle, errChan = filterBlacklist(needle, args.blacklistFile)
-			go errCollect(errChan, "blacklist")
-		}
-		if args.topCut != 0.0 {
-			needle, errChan = filterTopCut(needle, args.topCut, sourcePlayerCounts)
-			go errCollect(errChan, "topcut")
-		}
-		if args.deduplicate {
-			needle, errChan = filterDuplicate(needle)
-			go errCollect(errChan, "duplicate")
-		}
-		if args.checkLegal {
-			needle, errChan = filterIllegal(needle, args.ruleset)
-			go errCollect(errChan, "illegal")
-		}
-		go gameCollect(needle)
+	// Filtering pipeline (thread the needle through all the filters)
+	needle := (<-chan sgfgrab.GameData)(games)
+	var errChan <-chan error
+	if args.minLength > 0 {
+		needle, errChan = filterMinLength(needle, args.minLength, args.workers)
+		go errCollect(errChan, "short")
 	}
-
-	// Applying pipeline (single goroutine for generating unique ID)
-	out := make(chan sgfgrab.GameData, 4096*args.workers)
-	go func() {
-		defer close(out)
-		needle := (<-chan sgfgrab.GameData)(filtered)
-		if args.playerID {
-			needle = applyPlayerID(needle)
-		}
-		if args.metaOnly {
-			needle = applyMetaOnly(needle)
-		}
-		for g := range needle {
-			out <- g
-		}
-	}()
+	if args.blacklistFile != "" {
+		needle, errChan = filterBlacklist(needle, args.blacklistFile, args.workers)
+		go errCollect(errChan, "blacklist")
+	}
+	if args.topCut != 0.0 {
+		needle, errChan = filterTopCut(needle, args.topCut, sourcePlayerCounts, args.workers)
+		go errCollect(errChan, "topcut")
+	}
+	if args.deduplicate {
+		needle, errChan = filterDuplicate(needle, args.workers)
+		go errCollect(errChan, "duplicate")
+	}
+	if args.checkLegal {
+		needle, errChan = filterIllegal(needle, args.ruleset, args.workers)
+		go errCollect(errChan, "illegal")
+	}
+	if args.playerID {
+		needle = applyPlayerID(needle, args.workers)
+	}
+	if args.metaOnly {
+		needle = applyMetaOnly(needle, args.workers)
+	}
+	go gameCollect(needle)
 
 	// Write games
 	done := writeGzipLines(marshalGame(out, args.workers), args.outFile)

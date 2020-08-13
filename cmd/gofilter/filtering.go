@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"sync"
 
 	"github.com/dodgebc/go-game-utils/sgfgrab"
 	"github.com/dodgebc/go-game-utils/weiqi"
@@ -18,36 +19,48 @@ import (
 type filterFunc func(g sgfgrab.GameData) error
 
 // filterWrapper creates a filtered channel and a non-nil error channel using the given filterFunc
-func filterWrapper(in <-chan sgfgrab.GameData, filter filterFunc) (<-chan sgfgrab.GameData, <-chan error) {
+func filterWrapper(in <-chan sgfgrab.GameData, filter filterFunc, workers int) (<-chan sgfgrab.GameData, <-chan error) {
 	out := make(chan sgfgrab.GameData)
 	cerr := make(chan error)
+
 	go func() {
 		defer close(out)
 		defer close(cerr)
-		for g := range in {
-			if err := filter(g); err != nil {
-				cerr <- fmt.Errorf("game %d: %s", g.GameID, err)
-			} else {
-				out <- g
-			}
+		var wg sync.WaitGroup
+		wg.Add(workers)
+		defer wg.Wait()
+
+		for i := 0; i < workers; i++ {
+			go func() {
+				defer wg.Done()
+
+				for g := range in {
+					if err := filter(g); err != nil {
+						cerr <- fmt.Errorf("game %d: %s", g.GameID, err)
+					} else {
+						out <- g
+					}
+				}
+			}()
 		}
+
 	}()
 	return out, cerr
 }
 
 // Filter games which are too short
-func filterMinLength(in <-chan sgfgrab.GameData, minLength int) (<-chan sgfgrab.GameData, <-chan error) {
+func filterMinLength(in <-chan sgfgrab.GameData, minLength int, workers int) (<-chan sgfgrab.GameData, <-chan error) {
 	filter := func(g sgfgrab.GameData) error {
 		if g.Length < minLength {
 			return fmt.Errorf("game length %d too short", g.Length)
 		}
 		return nil
 	}
-	return filterWrapper(in, filter)
+	return filterWrapper(in, filter, workers)
 }
 
 // Filter games where a player matches the blacklist
-func filterBlacklist(in <-chan sgfgrab.GameData, blacklistFile string) (<-chan sgfgrab.GameData, <-chan error) {
+func filterBlacklist(in <-chan sgfgrab.GameData, blacklistFile string, workers int) (<-chan sgfgrab.GameData, <-chan error) {
 
 	// Load the blacklist
 	var blacklistRe []*regexp.Regexp
@@ -81,11 +94,11 @@ func filterBlacklist(in <-chan sgfgrab.GameData, blacklistFile string) (<-chan s
 		}
 		return nil
 	}
-	return filterWrapper(in, filter)
+	return filterWrapper(in, filter, workers)
 }
 
 // Filter games with very frequent players (likely bots)
-func filterTopCut(in <-chan sgfgrab.GameData, topCut float64, sourcePlayerCounts map[string]map[string]int) (<-chan sgfgrab.GameData, <-chan error) {
+func filterTopCut(in <-chan sgfgrab.GameData, topCut float64, sourcePlayerCounts map[string]map[string]int, workers int) (<-chan sgfgrab.GameData, <-chan error) {
 
 	// Compute source blacklist
 	sourceBlacklist := make(map[string][]string)
@@ -114,18 +127,21 @@ func filterTopCut(in <-chan sgfgrab.GameData, topCut float64, sourcePlayerCounts
 		}
 		return nil
 	}
-	return filterWrapper(in, filter)
+	return filterWrapper(in, filter, workers)
 }
 
 // Filter duplicate games
-func filterDuplicate(in <-chan sgfgrab.GameData) (<-chan sgfgrab.GameData, <-chan error) {
+func filterDuplicate(in <-chan sgfgrab.GameData, workers int) (<-chan sgfgrab.GameData, <-chan error) {
 
 	// Initialize hashing
 	hashTable := make(map[uint64]bool)
+	var mux sync.Mutex
 	var hash maphash.Hash
 
 	// Apply filter
 	filter := func(g sgfgrab.GameData) error {
+		mux.Lock()
+		defer mux.Unlock()
 		hash.Reset()
 		for _, m := range g.Moves {
 			hash.WriteString(m)
@@ -135,15 +151,16 @@ func filterDuplicate(in <-chan sgfgrab.GameData) (<-chan sgfgrab.GameData, <-cha
 		if hashTable[sum] {
 			return errors.New("duplicate game")
 		}
+		hashTable[sum] = true
 		return nil
 	}
-	return filterWrapper(in, filter)
+	return filterWrapper(in, filter, workers)
 }
 
 // Filter illegal games
-func filterIllegal(in <-chan sgfgrab.GameData, ruleset string) (<-chan sgfgrab.GameData, <-chan error) {
+func filterIllegal(in <-chan sgfgrab.GameData, ruleset string, workers int) (<-chan sgfgrab.GameData, <-chan error) {
 	filter := func(g sgfgrab.GameData) error {
 		return weiqi.CheckLegal(g.Size[0], g.Size[1], g.Setup, g.Moves, ruleset)
 	}
-	return filterWrapper(in, filter)
+	return filterWrapper(in, filter, workers)
 }

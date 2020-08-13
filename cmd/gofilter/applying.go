@@ -3,46 +3,60 @@ package main
 import (
 	"log"
 	"math/rand"
+	"sync"
 
 	"github.com/dodgebc/go-game-utils/sgfgrab"
 )
-
-// GENERATING IDs SHOULD BE DONE BY A SINGLE GOROUTINE THROUGHOUT EXECUTION
 
 // applyFunc modifies a game
 type applyFunc func(g *sgfgrab.GameData)
 
 // applyWrapper creates a channel with modifications using the given applyFunc
-func applyWrapper(in <-chan sgfgrab.GameData, apply applyFunc) <-chan sgfgrab.GameData {
+func applyWrapper(in <-chan sgfgrab.GameData, apply applyFunc, workers int) <-chan sgfgrab.GameData {
 	out := make(chan sgfgrab.GameData)
+
 	go func() {
 		defer close(out)
-		for g := range in {
-			apply(&g)
-			out <- g
+		var wg sync.WaitGroup
+		wg.Add(workers)
+		defer wg.Wait()
+
+		for i := 0; i < workers; i++ {
+			go func() {
+				defer wg.Done()
+
+				for g := range in {
+					apply(&g)
+					out <- g
+				}
+			}()
 		}
 	}()
+
 	return out
 }
 
 // Strip moves and setup from game
-func applyMetaOnly(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
+func applyMetaOnly(in <-chan sgfgrab.GameData, workers int) <-chan sgfgrab.GameData {
 	apply := func(g *sgfgrab.GameData) {
 		g.Moves = g.Moves[:0]
 		g.Setup = g.Setup[:0]
 	}
-	return applyWrapper(in, apply)
+	return applyWrapper(in, apply, workers)
 }
 
-// Generate a unique ID for each player to replace their names (ONLY ONE SHOULD BE RUNNING)
-func applyPlayerID(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
+// Generate a unique ID for each player to replace their names
+func applyPlayerID(in <-chan sgfgrab.GameData, workers int) <-chan sgfgrab.GameData {
 
 	// Initialize "two way" lookup table
 	SourcePlayerIDTable := make(map[string]map[string]uint32)
 	PlayerIDUsed := make(map[uint32]bool)
+	var mux sync.Mutex
 
 	// If player has not been seen before, use a unique random number
 	apply := func(g *sgfgrab.GameData) {
+		mux.Lock()
+		defer mux.Unlock()
 		if _, ok := SourcePlayerIDTable[g.Source]; !ok {
 			SourcePlayerIDTable[g.Source] = make(map[string]uint32)
 		}
@@ -79,5 +93,5 @@ func applyPlayerID(in <-chan sgfgrab.GameData) <-chan sgfgrab.GameData {
 			}
 		}
 	}
-	return applyWrapper(in, apply)
+	return applyWrapper(in, apply, workers)
 }
