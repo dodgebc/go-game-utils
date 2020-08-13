@@ -10,10 +10,20 @@ var ErrAlreadyExists = errors.New("property already exists")
 
 // GameData stores important parsed game data
 type GameData struct {
-	Size        [2]int   // (rows, cols) >= 1
-	Komi        float64  //
-	Handicap    int      // >=0, unlike SGF
-	Length      int      // number of actual game moves
+
+	// must manually set these fields if desired
+	Source  string `json:",omitempty"`
+	GameID  uint32 `json:",omitempty"`
+	BlackID uint32 `json:",omitempty"`
+	WhiteID uint32 `json:",omitempty"`
+
+	// critical fields where zero means something
+	Size     [2]int  // (rows, cols) >= 1
+	Komi     float64 //
+	Handicap int     // >=0, unlike SGF
+	Length   int     // number of actual game moves
+
+	// optional fields where zero means nothing
 	Winner      string   `json:",omitempty"` // "B", "W", or "" (no winner)
 	Score       float64  `json:",omitempty"` //
 	End         string   `json:",omitempty"` // "Scored", "Time", "Resign", "Forfeit", or ""
@@ -23,14 +33,8 @@ type GameData struct {
 	WhitePlayer string   `json:",omitempty"` //
 	Time        int      `json:",omitempty"` // >=0, seconds
 	Year        int      `json:",omitempty"` //
-	Moves       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
 	Setup       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
-
-	// convenience fields that can be manually set
-	Source  string `json:",omitempty"`
-	GameID  uint32 `json:",omitempty"`
-	BlackID uint32 `json:",omitempty"`
-	WhiteID uint32 `json:",omitempty"`
+	Moves       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
 
 	alreadyRecorded [11]bool
 }

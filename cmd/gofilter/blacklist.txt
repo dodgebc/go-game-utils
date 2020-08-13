@@ -1,4 +1,6 @@
-bot
+^$
 kata
-royal
+bot
 alpha
+zero
+leela
