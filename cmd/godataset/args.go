@@ -10,11 +10,22 @@ import (
 )
 
 type arguments struct {
+
+	// Input/output
 	outFile    string
 	sourceFile string
 	tgzFiles   []string
-	workers    int
-	verbose    bool
+
+	// Filters
+	gameid      bool
+	minLength   int
+	deduplicate bool
+	checkLegal  bool
+	ruleset     string
+
+	// Execution
+	workers int
+	verbose bool
 }
 
 func (a *arguments) parse() {
@@ -22,6 +33,11 @@ func (a *arguments) parse() {
 	// Assign variables
 	flag.StringVar(&a.outFile, "out", "", "output filepath for .jsonl.gz dataset")
 	flag.StringVar(&a.sourceFile, "sources", "", "csv file mapping archive names to sources names, otherwise use archive name")
+	flag.BoolVar(&a.gameid, "gameid", false, "add a unique ID to each game")
+	flag.IntVar(&a.minLength, "minlength", 0, "minimum number of moves per game")
+	flag.BoolVar(&a.deduplicate, "deduplicate", false, "remove games with duplicate move sequences")
+	flag.BoolVar(&a.checkLegal, "checklegal", false, "check if games are legal under provided ruleset")
+	flag.StringVar(&a.ruleset, "ruleset", "", "ruleset to use for legality checking: \"NZ\", \"AGA\", \"TT\", or \"\"")
 	flag.IntVar(&a.workers, "parfactor", 1, "parallel processing factor")
 	flag.BoolVar(&a.verbose, "verbose", false, "explain all skipped games to stderr")
 
@@ -36,6 +52,14 @@ func (a *arguments) parse() {
 }
 
 func (a *arguments) check() error {
+	if a.minLength < 0 {
+		return errors.New("minlength must be non-negative")
+	}
+	switch a.ruleset {
+	case "NZ", "TT", "AGA", "":
+	default:
+		return fmt.Errorf("ruleset %q not supported", a.ruleset)
+	}
 	if a.workers < 1 {
 		return errors.New("parfactor must be at least 1")
 	}
@@ -53,7 +77,5 @@ func (a *arguments) check() error {
 			return errors.New("did not overwrite file")
 		}
 	}
-
 	return nil
-
 }

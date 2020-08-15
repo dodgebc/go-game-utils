@@ -12,10 +12,8 @@ var ErrAlreadyExists = errors.New("property already exists")
 type GameData struct {
 
 	// must manually set these fields if desired
-	Source  string `json:",omitempty"`
-	GameID  uint32 `json:",omitempty"`
-	BlackID uint32 `json:",omitempty"`
-	WhiteID uint32 `json:",omitempty"`
+	Source string `json:",omitempty"`
+	GameID uint32 `json:",omitempty"`
 
 	// critical fields where zero means something
 	Size     [2]int  // (rows, cols) >= 1

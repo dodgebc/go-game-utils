@@ -1,6 +1,0 @@
-^$
-kata
-bot
-alpha
-zero
-leela
