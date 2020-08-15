@@ -177,3 +177,12 @@ func applySourceName(in <-chan packet, sourceFile string, workers int) <-chan pa
 	}
 	return applyWrapper(in, apply, workers)
 }
+
+// Strip move data
+func applyMetaOnly(in <-chan packet, workers int) <-chan packet {
+	apply := func(p *packet) {
+		p.game.Moves = p.game.Moves[:0]
+		p.game.Setup = p.game.Setup[:0]
+	}
+	return applyWrapper(in, apply, workers)
+}

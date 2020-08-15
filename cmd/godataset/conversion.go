@@ -31,7 +31,7 @@ func readTgzSgf(tgzFile string) <-chan []byte {
 		// Decompress input file stream
 		gzipReader, err := gzip.NewReader(fin)
 		if err != nil {
-			log.Fatal("failed to decompress tgz archive: %s", err)
+			log.Fatalf("failed to decompress tgz archive: %s", err)
 		}
 		defer gzipReader.Close()
 
@@ -43,7 +43,7 @@ func readTgzSgf(tgzFile string) <-chan []byte {
 				break // End of archive
 			}
 			if err != nil {
-				log.Fatal("tar archive read error: %s", err)
+				log.Fatalf("tar archive read error: %s", err)
 			}
 
 			if header.Typeflag == tar.TypeReg {
@@ -52,7 +52,7 @@ func readTgzSgf(tgzFile string) <-chan []byte {
 				if (len(hName) >= 4) && (strings.ToLower(hName[len(hName)-4:]) == ".sgf") {
 					sgfBytes, err := ioutil.ReadAll(tarReader) // Read whole file
 					if err != nil {
-						log.Fatal("tar archive file read error: %s", err)
+						log.Fatalf("tar archive file read error: %s", err)
 					}
 					out <- sgfBytes // Send for processing
 				}

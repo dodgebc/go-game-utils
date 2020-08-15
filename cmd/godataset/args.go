@@ -18,6 +18,7 @@ type arguments struct {
 
 	// Filters
 	gameid      bool
+	metaOnly    bool
 	minLength   int
 	deduplicate bool
 	checkLegal  bool
@@ -34,6 +35,7 @@ func (a *arguments) parse() {
 	flag.StringVar(&a.outFile, "out", "", "output filepath for .jsonl.gz dataset")
 	flag.StringVar(&a.sourceFile, "sources", "", "csv file mapping archive names to sources names, otherwise use archive name")
 	flag.BoolVar(&a.gameid, "gameid", false, "add a unique ID to each game")
+	flag.BoolVar(&a.metaOnly, "metaonly", false, "strip move data")
 	flag.IntVar(&a.minLength, "minlength", 0, "minimum number of moves per game")
 	flag.BoolVar(&a.deduplicate, "deduplicate", false, "remove games with duplicate move sequences")
 	flag.BoolVar(&a.checkLegal, "checklegal", false, "check if games are legal under provided ruleset")

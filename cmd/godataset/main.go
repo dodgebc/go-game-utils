@@ -49,6 +49,9 @@ func main() {
 	if args.gameid {
 		good = applyGameID(good, args.workers)
 	}
+	if args.metaOnly {
+		good = applyMetaOnly(good, args.workers)
+	}
 	if args.sourceFile != "" {
 		good = applySourceName(good, args.sourceFile, args.workers)
 	}

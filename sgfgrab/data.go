@@ -3,6 +3,7 @@ package sgfgrab
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrAlreadyExists means that a property was already recorded for the game
@@ -30,7 +31,7 @@ type GameData struct {
 	BlackPlayer string   `json:",omitempty"` //
 	WhitePlayer string   `json:",omitempty"` //
 	Time        int      `json:",omitempty"` // >=0, seconds
-	Year        int      `json:",omitempty"` //
+	Year        int      `json:",omitempty"` // [0-9]{4}
 	Setup       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
 	Moves       []string `json:",omitempty"` // matches ([BW][a-z]{2})?
 
@@ -165,14 +166,14 @@ func (g *GameData) AddProperty(identifier, value string) error {
 		if g.alreadyRecorded[6] {
 			return fmt.Errorf("%w: %s %s", ErrAlreadyExists, identifier, value)
 		}
-		g.BlackPlayer = value
+		g.BlackPlayer = strings.Replace(strings.Replace(value, "\n", " ", -1), "\r", "", -1)
 		g.alreadyRecorded[6] = true
 		return nil
 	case "PW":
 		if g.alreadyRecorded[7] {
 			return fmt.Errorf("%w: %s %s", ErrAlreadyExists, identifier, value)
 		}
-		g.WhitePlayer = value
+		g.WhitePlayer = strings.Replace(strings.Replace(value, "\n", " ", -1), "\r", "", -1)
 		g.alreadyRecorded[7] = true
 		return nil
 	case "TM":
