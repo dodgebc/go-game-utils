@@ -32,11 +32,7 @@ func main() {
 	collect := func(ps <-chan packet, kind string) {
 		for p := range ps {
 			if p.err != nil && args.verbose {
-				if p.game.GameID != 0 {
-					log.Printf("game %d: %s\n", p.game.GameID, p.err)
-				} else {
-					log.Println(p.err)
-				}
+				log.Println(p.err)
 			}
 			monChan <- kind
 		}
@@ -77,6 +73,7 @@ func main() {
 	}()
 	finishedAll := writeGzipLines(marshalGame(out, args.workers), args.outFile)
 	defer func() { <-finishedAll }()
+	defer close(in)
 
 	// Loop over all archives
 	for _, tgzFile := range args.tgzFiles {
@@ -136,5 +133,4 @@ func main() {
 		close(finish)
 		<-finished
 	}
-	close(in)
 }

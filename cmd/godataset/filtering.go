@@ -128,17 +128,18 @@ func applyGameID(in <-chan packet, workers int) <-chan packet {
 	// Keep track of used game IDs
 	GameIDUsed := make(map[uint32]bool)
 	var mux sync.Mutex
+	src := rand.NewSource(1)
+	random := rand.New(src)
 
 	// Use a unique random number
 	apply := func(p *packet) {
 		mux.Lock()
 		defer mux.Unlock()
-		tryID := rand.Uint32()
+		tryID := random.Uint32()
 		i := 0
 		for used := GameIDUsed[tryID]; used; used = GameIDUsed[tryID] {
-			rand.Seed(int64(tryID))
-			tryID = rand.Uint32()
-			if i++; i > 50 {
+			tryID = random.Uint32()
+			if i++; i > 100 {
 				log.Fatal("random number cycle detected")
 			}
 		}
